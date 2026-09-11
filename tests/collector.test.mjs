@@ -1,0 +1,21 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
+test('extension acknowledges only after an authenticated page stages the matching capture',async()=>{
+ const calls=[],posted=[];let listener;
+ const context={location:{origin:'https://chuljang-receipts.jhleokim.chatgpt.site'},chrome:{runtime:{sendMessage:async message=>{calls.push(message);return message.type==='GET_CAPTURE'?{captureId:'test',packet:{source:'ktx',blocks:['test']}}:{ok:true};}}}};
+ context.window={addEventListener:(_name,fn)=>{listener=fn;},postMessage:message=>posted.push(message)};
+ vm.runInNewContext(readFileSync(new URL('../collector/bridge.js',import.meta.url),'utf8'),context);
+ assert.equal(calls.length,0);
+ listener({source:context.window,origin:'https://untrusted.invalid',data:{type:'CHULJANG_READY'}});
+ assert.equal(calls.length,0);
+ listener({source:context.window,origin:context.location.origin,data:{type:'CHULJANG_READY'}});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls.length,1);assert.equal(calls[0].type,'GET_CAPTURE');
+ assert.equal(posted.at(-1).type,'CHULJANG_COLLECTED');
+ listener({source:context.window,origin:context.location.origin,data:{type:'CHULJANG_STAGED',captureId:'wrong'}});
+ assert.equal(calls.length,1);
+ listener({source:context.window,origin:context.location.origin,data:{type:'CHULJANG_STAGED',captureId:'test'}});
+ assert.equal(calls[1].type,'ACK_CAPTURE');
+});
