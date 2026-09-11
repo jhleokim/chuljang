@@ -26,6 +26,7 @@ export default defineConfig(async () => {
   const bindingConfig = {
     main: "vinext/server/fetch-handler",
     compatibility_flags: ["nodejs_compat"],
+    workers_dev: true,
     d1_databases: d1
       ? [
           {

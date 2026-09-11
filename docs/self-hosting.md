@@ -41,7 +41,16 @@ npx wrangler d1 execute DB --remote --config dist/server/wrangler.json \
 
 ## 배포
 
-1. Cloudflare 계정에 D1과 R2를 만든다.
+0. Cloudflare API 토큰을 준비한다. 권한은 Workers Scripts 편집, Workers R2 Storage 편집, D1 편집, Workers KV 읽기가 필요하다.
+   ```
+   export CLOUDFLARE_ACCOUNT_ID=...
+   export CLOUDFLARE_API_TOKEN=...
+   ```
+1. D1과 R2를 만든다. 출력에 나오는 database_id를 다음 단계에 쓴다.
+   ```
+   npx wrangler d1 create chuljang
+   npx wrangler r2 bucket create chuljang-receipts
+   ```
 2. 실제 식별자를 넣어 빌드한다. 값을 주지 않으면 로컬 개발용 자리표시자가 들어간다.
    ```
    CHULJANG_D1_DATABASE_ID=... CHULJANG_D1_DATABASE_NAME=... CHULJANG_R2_BUCKET_NAME=... npm run build
@@ -50,7 +59,29 @@ npx wrangler d1 execute DB --remote --config dist/server/wrangler.json \
 4. `npm run deploy`로 Worker를 올린다. 계정 선택은 `CLOUDFLARE_ACCOUNT_ID`·`CLOUDFLARE_API_TOKEN`을 사용한다.
 5. `wrangler secret put CHULJANG_AUTH_SECRET`, `CHULJANG_ACCESS_CODE`와 필요한 수집 비밀키를 설정한다.
 
-배포 명령은 이 저장소에서 실행해 검증하지 않았다. 빌드 산출물(`dist/server/wrangler.json`)과 마이그레이션은 로컬에서 확인했다.
+주소는 `chuljang.<계정 subdomain>.workers.dev`가 된다. 자체 도메인은 나중에 Cloudflare 대시보드나 wrangler routes로 연결한다.
+
+## GitHub Actions로 배포
+
+`.github/workflows/deploy.yml`이 위 절차를 대신 수행한다. 수동 실행 전용이라 푸시만으로 배포되지 않는다. **workflow_dispatch 워크플로는 기본 브랜치에 있어야 Actions 탭에 나타난다.**
+
+1. Cloudflare에서 D1·R2를 만들고 API 토큰을 발급한다(위 0~1단계).
+2. 저장소 Settings → Secrets and variables → Actions에 등록한다.
+
+   | 종류 | 이름 | 값 |
+   | --- | --- | --- |
+   | Variables | `CHULJANG_D1_DATABASE_ID` | `wrangler d1 create` 출력의 database_id |
+   | Variables | `CHULJANG_D1_DATABASE_NAME` | 예: `chuljang` |
+   | Variables | `CHULJANG_R2_BUCKET_NAME` | 예: `chuljang-receipts` |
+   | Secrets | `CLOUDFLARE_API_TOKEN`·`CLOUDFLARE_ACCOUNT_ID` | 배포 자격증명 |
+   | Secrets | `CHULJANG_AUTH_SECRET`·`CHULJANG_ACCESS_CODE` | 로그인 설정. 없으면 배포본에서 로그인할 수 없다 |
+   | Secrets | `CHULJANG_ALLOWED_EMAILS`·`CHULJANG_USER_ALIASES`·`CHULJANG_COLLECTOR_URL`·`CHULJANG_COLLECTOR_SECRET` | 선택. 비워 두면 건너뛴다 |
+
+3. Actions → Deploy → Run workflow. 마이그레이션 적용과 비밀키 갱신은 실행할 때 켜고 끌 수 있다.
+
+워크플로는 테스트·타입체크를 통과해야 배포하고, 배포 후 Worker 비밀키를 넣은 다음 실행 요약에 접속 주소를 남긴다. 비어 있는 시크릿은 건너뛰므로 기존 값이 지워지지 않는다.
+
+Cloudflare 계정 자격증명이 없어 이 저장소에서 실제 배포를 실행해 확인하지는 못했다. 빌드 산출물(`dist/server/wrangler.json`, `workers_dev: true`), 로컬 마이그레이션, 워크플로의 셸 로직과 YAML은 확인했다.
 
 ## 확장(collector/)
 

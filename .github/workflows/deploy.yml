@@ -1,0 +1,109 @@
+name: Deploy
+
+# 수동 실행 전용. Actions 탭에서 Run workflow로 배포한다.
+on:
+  workflow_dispatch:
+    inputs:
+      migrate:
+        description: 배포 전에 D1 마이그레이션을 적용한다
+        type: boolean
+        default: true
+      sync_secrets:
+        description: Worker 비밀키를 저장소 시크릿 값으로 갱신한다
+        type: boolean
+        default: true
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm run install:ci
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        env:
+          CHULJANG_D1_DATABASE_ID: ${{ vars.CHULJANG_D1_DATABASE_ID }}
+          CHULJANG_D1_DATABASE_NAME: ${{ vars.CHULJANG_D1_DATABASE_NAME }}
+          CHULJANG_R2_BUCKET_NAME: ${{ vars.CHULJANG_R2_BUCKET_NAME }}
+        run: |
+          for required in CHULJANG_D1_DATABASE_ID CHULJANG_D1_DATABASE_NAME CHULJANG_R2_BUCKET_NAME; do
+            if [ -z "${!required}" ]; then
+              echo "::error::저장소 변수 $required 가 비어 있습니다. Settings → Secrets and variables → Actions → Variables에서 설정하세요."
+              exit 1
+            fi
+          done
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::시크릿 CLOUDFLARE_API_TOKEN 과 CLOUDFLARE_ACCOUNT_ID 가 필요합니다."
+            exit 1
+          fi
+          npm run build
+
+      - name: Migrate D1
+        if: ${{ inputs.migrate }}
+        run: npm run db:migrate:remote
+
+      - name: Deploy worker
+        id: deploy
+        shell: bash
+        run: |
+          npm run deploy 2>&1 | tee deploy.log
+          echo "url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)" >> "$GITHUB_OUTPUT"
+
+      # 배포된 Worker에만 비밀키를 넣는다. 비어 있는 값은 건너뛰므로 기존 값이 지워지지 않는다.
+      - name: Sync worker secrets
+        if: ${{ inputs.sync_secrets }}
+        env:
+          CHULJANG_AUTH_SECRET: ${{ secrets.CHULJANG_AUTH_SECRET }}
+          CHULJANG_ACCESS_CODE: ${{ secrets.CHULJANG_ACCESS_CODE }}
+          CHULJANG_ALLOWED_EMAILS: ${{ secrets.CHULJANG_ALLOWED_EMAILS }}
+          CHULJANG_USER_ALIASES: ${{ secrets.CHULJANG_USER_ALIASES }}
+          CHULJANG_COLLECTOR_URL: ${{ secrets.CHULJANG_COLLECTOR_URL }}
+          CHULJANG_COLLECTOR_SECRET: ${{ secrets.CHULJANG_COLLECTOR_SECRET }}
+        run: |
+          put() {
+            if [ -z "${!1}" ]; then
+              echo "skip $1"
+              return
+            fi
+            printf '%s' "${!1}" | node ./node_modules/wrangler/bin/wrangler.js secret put "$1" --config dist/server/wrangler.json
+          }
+          put CHULJANG_AUTH_SECRET
+          put CHULJANG_ACCESS_CODE
+          put CHULJANG_ALLOWED_EMAILS
+          put CHULJANG_USER_ALIASES
+          put CHULJANG_COLLECTOR_URL
+          put CHULJANG_COLLECTOR_SECRET
+          if [ -z "$CHULJANG_AUTH_SECRET" ]; then
+            echo "::warning::CHULJANG_AUTH_SECRET 시크릿이 없으면 배포본에서 로그인할 수 없습니다."
+          fi
+
+      - name: Summary
+        run: |
+          {
+            echo "### 배포 완료"
+            echo
+            echo "- Worker: \`$(jq -r .name dist/server/wrangler.json)\`"
+            echo "- 주소: ${{ steps.deploy.outputs.url || '배포 로그를 확인하세요' }}"
+            echo "- 마이그레이션: ${{ inputs.migrate }} / 비밀키 갱신: ${{ inputs.sync_secrets }}"
+          } >> "$GITHUB_STEP_SUMMARY"
