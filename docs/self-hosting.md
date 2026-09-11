@@ -41,45 +41,45 @@ npx wrangler d1 execute DB --remote --config dist/server/wrangler.json \
 
 ## 배포 — 푸시하면 Cloudflare가 배포
 
-Cloudflare Workers Builds에 저장소를 연결하면 브랜치에 푸시할 때마다 빌드·배포된다. 별도의 CI 설정이나 API 토큰 보관은 필요 없다.
+Cloudflare Workers Builds에 저장소를 연결하면 브랜치에 푸시할 때마다 빌드·마이그레이션·배포가 끝난다. 로컬에 wrangler를 설치하거나 API 토큰을 따로 보관할 필요가 없다. 아래 설정은 모두 Cloudflare 대시보드(웹)에서 한다.
 
-### 최초 1회
+### 최초 1회 (대시보드에서)
 
-1. D1과 R2를 만든다.
-   ```
-   npx wrangler d1 create chuljang
-   npx wrangler r2 bucket create chuljang-receipts
-   ```
-2. 출력된 `database_id`를 `hosting.json`의 `d1_database_id`에 넣고 커밋한다. 이 값은 비밀이 아니며, 저장소에 있어야 Cloudflare 빌드가 바인딩을 찾는다. 이름을 바꿨다면 `d1_database_name`·`r2_bucket_name`도 맞춘다.
-3. Cloudflare 대시보드 → Workers & Pages → Create → Import a repository에서 이 저장소를 연결하고 설정한다.
+1. **D1 생성** — Storage & Databases → D1 → Create. 이름 `chuljang`. 만들고 나면 보이는 **Database ID**를 복사한다.
+2. **R2 생성** — R2 → Create bucket. 이름 `chuljang-receipts`.
+3. **저장소에 ID 반영** — `hosting.json`의 `d1_database_id`에 2단계에서 복사한 값을 넣고 커밋한다. 비밀값이 아니며, 저장소에 있어야 Cloudflare 빌드가 바인딩을 찾는다.
+4. **저장소 연결** — Workers & Pages → Create → Import a repository에서 이 저장소를 고르고 다음처럼 설정한다.
 
    | 항목 | 값 |
    | --- | --- |
    | Build command | `npm run build` |
-   | Deploy command | `npx wrangler deploy --config dist/server/wrangler.json` |
+   | Deploy command | `npm run deploy:ci` |
    | Root directory | `/` |
-   | Build variable | `NODE_VERSION=22` |
+   | Build variable | `NODE_VERSION` = `22` |
 
-4. 스키마를 적용한다. 로컬에서 한 번만 실행하면 된다.
-   ```
-   npm run build && npm run db:migrate:remote
-   ```
-5. 로그인 비밀키를 넣는다. 저장소에는 넣지 않는다.
-   ```
-   npx wrangler secret put CHULJANG_AUTH_SECRET --config dist/server/wrangler.json
-   npx wrangler secret put CHULJANG_ACCESS_CODE --config dist/server/wrangler.json
-   ```
-   대시보드의 Worker → Settings → Variables and Secrets에서 넣어도 된다. 수집 서버를 쓰면 `CHULJANG_COLLECTOR_URL`·`CHULJANG_COLLECTOR_SECRET`도 같은 방식으로 설정한다.
+   `deploy:ci`는 D1 마이그레이션을 적용한 뒤 배포한다. 적용 기록을 D1에 남기므로 매번 푸시해도 이미 적용된 마이그레이션은 건너뛴다.
+5. **로그인 비밀키 설정** — 배포된 Worker → Settings → Variables and Secrets → Add → Secret으로 넣는다. 저장소에는 넣지 않는다.
+
+   | 이름 | 값 |
+   | --- | --- |
+   | `CHULJANG_AUTH_SECRET` | 충분히 긴 임의 문자열 |
+   | `CHULJANG_ACCESS_CODE` | 로그인할 때 입력할 접속 코드 |
+
+   수집 서버를 쓰면 `CHULJANG_COLLECTOR_URL`·`CHULJANG_COLLECTOR_SECRET`도 같은 화면에서 설정한다. 비밀키를 넣은 뒤에는 한 번 더 배포(또는 Retry deployment)해야 반영된다.
 
 주소는 `chuljang.<계정 subdomain>.workers.dev`가 된다. 자체 도메인은 Worker → Settings → Domains & Routes에서 붙인다.
 
 ### 이후
 
-푸시만 하면 된다. 마이그레이션은 자동으로 돌지 않는다. `drizzle/`에 새 SQL이 생겼을 때만 `npm run db:migrate:remote`를 한 번 실행한다(기존 파일을 다시 적용하면 테이블 중복 생성으로 실패한다).
+푸시만 하면 된다. 스키마가 바뀌어 `drizzle/`에 새 SQL이 생겨도 배포 때 자동으로 적용된다.
 
-`d1_database_id`를 비워 둔 채 Cloudflare 빌드가 돌면 빌드 단계에서 안내와 함께 실패한다. 로컬 개발은 이 값이 비어 있어도 자리표시자로 동작한다.
+### 막힐 때
 
-Cloudflare 계정 자격증명이 없어 이 저장소에서 실제 배포를 실행해 확인하지는 못했다. 빌드 산출물(`dist/server/wrangler.json`, `workers_dev: true`), 식별자 주입, 빈 `d1_database_id` 가드, 로컬 마이그레이션은 확인했다.
+- 빌드가 `d1_database_id가 비어 있습니다`로 멈추면 3단계를 빠뜨린 것이다.
+- 배포 명령의 마이그레이션 단계에서 인증 오류가 나면(빌드 환경이 D1 호출 자격증명을 주지 않는 경우), Deploy command를 `npm run deploy`로 되돌리고 스키마는 D1 → 해당 데이터베이스 → Console에서 `drizzle/0000_fluffy_fallen_one.sql` 내용을 붙여넣어 한 번 실행한다. 그다음부터는 기록 테이블 덕분에 중복 적용되지 않는다.
+- 로그인 화면이 "로그인 설정이 아직 준비되지 않았습니다"를 표시하면 5단계 비밀키가 없거나 아직 배포에 반영되지 않은 것이다.
+
+Cloudflare 계정 자격증명이 없어 이 저장소에서 실제 배포를 실행해 확인하지는 못했다. 빌드 산출물(`dist/server/wrangler.json`, `workers_dev: true`), 식별자 주입, 빈 `d1_database_id` 가드, 마이그레이션의 신규 적용·재실행·기존 스키마 인수는 로컬에서 확인했다.
 
 ## 확장(collector/)
 

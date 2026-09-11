@@ -15,6 +15,7 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "deploy": "node --import ./scripts/wrangler-env.mjs ./node_modules/wrangler/bin/wrangler.js deploy --config dist/server/wrangler.json",
+    "deploy:ci": "npm run db:migrate:remote && npm run deploy",
     "db:migrate": "node --import ./scripts/wrangler-env.mjs ./scripts/migrate.mjs",
     "db:migrate:remote": "node --import ./scripts/wrangler-env.mjs ./scripts/migrate.mjs --remote"
   },
