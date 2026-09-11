@@ -1,0 +1,13 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "chuljang-collector",
+  "main": "index.ts",
+  "account_id": "bc682cc44caf5e9d28f2f06218af3420",
+  "compatibility_date": "2026-09-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "browser": { "binding": "BROWSER" },
+  "durable_objects": { "bindings": [{ "name": "CONNECTIONS", "class_name": "ReceiptConnection" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ReceiptConnection"] }],
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 },
+  "vars": { "CONSENT_VERSION": "2026-09-11" }
+}
