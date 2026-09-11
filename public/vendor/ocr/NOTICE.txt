@@ -1,0 +1,3 @@
+Tesseract.js 5.1.1 and tesseract.js-core: Apache-2.0; bundled LICENSE files apply.
+Language models: https://github.com/naptha/tessdata / https://github.com/tesseract-ocr/tessdata_best (Apache-2.0).
+Sources are copied without modification. Language assets are used locally; receipt images are never sent to a recognition service.
