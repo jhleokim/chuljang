@@ -43,7 +43,7 @@ export function parseReceipt(raw:string,source:Source):Partial<Candidate>&{sourc
  let amount:number|undefined;
  if(candidates.length&&!foreign){const top=Math.max(...candidates.map(c=>c.score));const values=[...new Set(candidates.filter(c=>c.score===top).map(c=>c.amount))];if(values.length===1)amount=values[0];}
  if(amount===undefined)issues.push(foreign?'외화 영수증: 원화 실결제 금액 입력':'결제 금액 확인');
- if(/취소\s*(완료|영수증)|환불\s*(완료|금액)/.test(text))issues.push('취소·환불 여부 확인');
+ if(/취소\s*(완료|영수증|처리|됨)|환불\s*(완료|금액|처리|됨)|상태\s*[:：]?\s*(취소|환불)|^\s*(취소|환불)\s*$|\b(cancelled|canceled|refunded|voided)\b/im.test(text))issues.push('취소·환불 여부 확인');
  const ref=/(?:승인번호|예약번호|승차권번호|거래번호)\s*[:：]?\s*([A-Z0-9][A-Z0-9\-]{3,50})/i.exec(text)?.[1]||'';
  const route=/(?:출발지?|승차역)\s*[:：]\s*([^\n\t]{1,25})/.exec(text)?.[1];
  const end=/(?:도착지?|하차역)\s*[:：]\s*([^\n\t]{1,25})/.exec(text)?.[1];

@@ -1,19 +1,28 @@
 {
   "manifest_version": 3,
   "name": "출장 영수증 수집",
-  "version": "1.0.0",
-  "description": "현재 열린 영수증 페이지의 텍스트를 검토한 뒤 내 출장 공간으로 보냅니다.",
+  "version": "2.0.0",
+  "minimum_chrome_version": "120",
+  "description": "로그인된 서비스의 이용내역을 찾아 내 출장 공간으로 자동 전송합니다.",
   "permissions": [
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "alarms"
   ],
   "action": {
     "default_popup": "popup.html"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
+  "host_permissions": ["https://chuljang-receipts.jhleokim.chatgpt.site/*"],
+  "optional_host_permissions": [
+    "https://www.korail.com/*", "https://korail.com/*", "https://www.letskorail.com/*",
+    "https://www.kobus.co.kr/*", "https://kobus.co.kr/*", "https://www.koreanair.com/*",
+    "https://flyasiana.com/*", "https://www.flyasiana.com/*", "https://business.socar.kr/*"
+  ],
   "content_scripts": [
     {
       "matches": [
