@@ -30,6 +30,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+/server-collector/.wrangler/
+/server-collector/.dev.vars*
+/.dev.vars*
 
 # vercel
 .vercel
@@ -44,3 +48,5 @@ next-env.d.ts
 /outputs/
 /work/
 *.tsbuildinfo
+
+/chuljang-artifacts/

@@ -28,3 +28,12 @@ const wrongBatch=await fetch(base+'/api/receipts',{method:'POST',headers:{Cookie
 scopedBody.set('requestedDates',JSON.stringify(['2026-09-09','2026-09-11']));
 const rightBatch=await fetch(base+'/api/receipts',{method:'POST',headers:{Cookie:cookies,Origin:base},body:scopedBody});assert.equal(rightBatch.status,200,'exact selected day accepted');
 console.log('Selected-date API validation passed.');
+
+assert.equal((await fetch(base+'/api/collection')).status,401,'collection requires sign-in');
+const collector=await call('/api/collection');assert.equal(collector.configured,true);assert.equal(collector.connections.length,5);
+assert.equal((await fetch(base+'/api/collection?skip=invalid',{headers:{Cookie:cookies}})).status,400);
+const collectRequest={action:'start',providers:['korail'],requestedDates:[],consent:true,jobId:crypto.randomUUID()};
+assert.equal((await fetch(base+'/api/collection',{method:'POST',headers:{Cookie:cookies,'Content-Type':'application/json',Origin:base},body:JSON.stringify(collectRequest)})).status,400,'empty date set rejected without starting browser');
+assert.equal((await fetch(base+'/api/collection',{method:'POST',headers:{Cookie:cookies,'Content-Type':'application/json',Origin:'https://attacker.invalid'},body:JSON.stringify(collectRequest)})).status,403);
+assert.equal((await fetch(base+'/api/collection',{method:'POST',headers:{Cookie:cookies,'Content-Type':'application/json'},body:JSON.stringify(collectRequest)})).status,403);
+console.log('Collection API passed: authenticated server connection, date validation, skip validation, CSRF and missing Origin rejection.');
