@@ -37,7 +37,7 @@ Node.js 22.13+와 npm이 필요합니다.
 
 ## 로그인과 배포
 
-로그인은 앱이 서명한 세션 쿠키로 처리하고, 배포는 Cloudflare Workers 계정만 있으면 됩니다. GitHub Actions의 Deploy 워크플로(수동 실행)로 테스트·빌드·마이그레이션·배포·비밀키 설정을 한 번에 수행합니다. 환경 변수, 기존 계정 데이터 이어받기, 배포 절차는 [직접 배포와 로그인](docs/self-hosting.md)에 있습니다. 기존 ChatGPT Sites 배포를 그대로 유지하려면 CHULJANG_TRUST_PLATFORM_AUTH=1을 설정해야 플랫폼 로그인 헤더를 계속 신뢰합니다.
+로그인은 앱이 서명한 세션 쿠키로 처리하고, 배포는 Cloudflare Workers 계정만 있으면 됩니다. Cloudflare Workers Builds에 저장소를 연결해 두면 푸시할 때마다 자동 배포됩니다. 환경 변수, 기존 계정 데이터 이어받기, 배포 절차는 [직접 배포와 로그인](docs/self-hosting.md)에 있습니다. 기존 ChatGPT Sites 배포를 그대로 유지하려면 CHULJANG_TRUST_PLATFORM_AUTH=1을 설정해야 플랫폼 로그인 헤더를 계속 신뢰합니다.
 
 ## 검증
 

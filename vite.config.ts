@@ -19,10 +19,25 @@ export default defineConfig(async () => {
   process.env.WRANGLER_REGISTRY_PATH ??= ".wrangler/dev-registry";
   process.env.MINIFLARE_REGISTRY_PATH ??= ".wrangler/registry";
 
-  const { d1, r2 } = await loadHostingConfig(process.cwd());
+  const config = await loadHostingConfig(process.cwd());
+  const { d1, r2 } = config;
+  const databaseName =
+    process.env.CHULJANG_D1_DATABASE_NAME || config.d1_database_name || "site-creator-d1";
+  const databaseId =
+    process.env.CHULJANG_D1_DATABASE_ID || config.d1_database_id || "";
+  const bucketName =
+    process.env.CHULJANG_R2_BUCKET_NAME || config.r2_bucket_name || "site-creator-r2";
 
-  // Local development uses placeholder identifiers. Set these variables before
-  // `npm run build` to emit a wrangler config that deploys to your own account.
+  // Cloudflare's git-connected builds set WORKERS_CI. Deploying with the local
+  // placeholder there would publish a Worker bound to a database that does not
+  // exist, so fail the build with the fix instead.
+  if (d1 && !databaseId && process.env.WORKERS_CI) {
+    throw new Error(
+      "hosting.json의 d1_database_id가 비어 있습니다. `wrangler d1 create`가 출력한 id를 넣고 커밋하거나 CHULJANG_D1_DATABASE_ID를 설정하세요.",
+    );
+  }
+
+  // Local development falls back to placeholder identifiers.
   const bindingConfig = {
     main: "vinext/server/fetch-handler",
     compatibility_flags: ["nodejs_compat"],
@@ -31,8 +46,8 @@ export default defineConfig(async () => {
       ? [
           {
             binding: d1,
-            database_name: process.env.CHULJANG_D1_DATABASE_NAME || "site-creator-d1",
-            database_id: process.env.CHULJANG_D1_DATABASE_ID || PLACEHOLDER_DATABASE_ID,
+            database_name: databaseName,
+            database_id: databaseId || PLACEHOLDER_DATABASE_ID,
           },
         ]
       : [],
@@ -40,7 +55,7 @@ export default defineConfig(async () => {
       ? [
           {
             binding: r2,
-            bucket_name: process.env.CHULJANG_R2_BUCKET_NAME || "site-creator-r2",
+            bucket_name: bucketName,
           },
         ]
       : [],

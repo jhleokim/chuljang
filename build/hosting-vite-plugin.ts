@@ -10,7 +10,16 @@ import type { Plugin } from "vite";
 
 const PLATFORM_HEADER_PREFIX = "oai-authenticated-user-";
 
-export type HostingConfig = { d1?: string; r2?: string; project_id?: string };
+export type HostingConfig = {
+  d1?: string;
+  r2?: string;
+  // Non-secret Cloudflare resource identifiers, committed so a git-connected
+  // build deploys without extra configuration. `wrangler d1 create` prints the id.
+  d1_database_name?: string;
+  d1_database_id?: string;
+  r2_bucket_name?: string;
+  project_id?: string;
+};
 
 async function exists(path: string): Promise<boolean> {
   try {

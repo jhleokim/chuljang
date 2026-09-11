@@ -1,4 +1,7 @@
 {
   "d1": "DB",
-  "r2": "BUCKET"
+  "r2": "BUCKET",
+  "d1_database_name": "chuljang",
+  "d1_database_id": "",
+  "r2_bucket_name": "chuljang-receipts"
 }
