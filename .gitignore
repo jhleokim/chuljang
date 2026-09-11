@@ -43,6 +43,7 @@ next-env.d.ts
 /dist/
 /.wrangler/
 /.sites-runtime/
+/.runtime/
 /.agents/
 /.codex/
 /outputs/

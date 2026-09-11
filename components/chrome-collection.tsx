@@ -8,6 +8,7 @@ import {ko} from 'date-fns/locale';
 import {format} from 'date-fns';
 import {SOURCES} from '@/collector/providers.js';
 import type {CollectionStatus} from '@/lib/server-collector';
+import {signInPath} from '@/lib/auth-paths';
 const live=['queued','opening','login','collecting'];
 const labels:Record<string,string>={disconnected:'연결 전',queued:'수집 대기',opening:'연결하는 중',login:'로그인 필요',collecting:'수집 중',partial:'조회 범위 확인 필요',error:'다시 연결 필요',stopped:'중단됨'};
 type Props={signedIn:boolean;upload:()=>void;requestedDates:string[];onDatesChange:(days:string[])=>void;skipCaptures:()=>string[];onCapture:(packet:unknown,id:string)=>Promise<void>};
@@ -29,7 +30,7 @@ export function TripCollection({signedIn,upload,requestedDates,onDatesChange,ski
   pollNow.current=poll;void poll();const timer=setInterval(()=>void poll(),5000);return()=>{controller.abort();clearInterval(timer);};
  },[signedIn]);
  async function action(body:Record<string,unknown>){setLoading(true);setError('');try{const response=await fetch('/api/collection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const value=await response.json() as CollectionStatus & {error?:string};if(!response.ok)throw new Error(value.error||'연결하지 못했어요.');const failed=value.connections?.find((item:{error?:string})=>item.error);if(failed)throw new Error(failed.error);setConsent(false);await pollNow.current();}catch(err){setError((err as Error).message);}finally{setLoading(false);}}
- function start(){if(!signedIn){location.href='/signin-with-chatgpt?return_to=/';return;}if(selected.some(id=>!status?.connections.find(item=>item.providerId===id)?.consentedAt)){setConsent(true);return;}void action({action:'start',providers:selected,requestedDates,consent:false,jobId:crypto.randomUUID()});}
+ function start(){if(!signedIn){location.href=signInPath('/');return;}if(selected.some(id=>!status?.connections.find(item=>item.providerId===id)?.consentedAt)){setConsent(true);return;}void action({action:'start',providers:selected,requestedDates,consent:false,jobId:crypto.randomUUID()});}
   return <><section className="date-journey" aria-labelledby="date-heading">
     <ol className="journey-steps"><li className={signedIn?'done':''}>01 로그인</li><li className="active">02 출장 날짜 선택</li><li>03 지정 양식으로 저장·공유</li></ol>
     <div className="date-content"><div className="date-copy"><span className="eyebrow">WHEN DID YOU TRAVEL?</span><h2 id="date-heading">출장 다녀온 날만<br/>골라주세요.</h2><p>하루씩 눌러 여러 날짜를 선택하세요.<br/>연결한 서비스에서 해당 이용일의 영수증을 찾습니다.</p>

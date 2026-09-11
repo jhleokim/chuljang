@@ -1,10 +1,17 @@
 import assert from 'node:assert/strict';
+import { signIn } from './sign-in.mjs';
 const base='http://localhost:5173';
 const anonymous=await fetch(base+'/api/receipts');
 assert.equal(anonymous.status,401,'anonymous records access');
-const signIn=await fetch(base+'/signin-with-chatgpt?return_to=/',{redirect:'manual'});
-const cookies=signIn.headers.getSetCookie().map(x=>x.split(';')[0]).join('; ');
-assert.ok(cookies,'development sign-in cookie');
+const legacy=await fetch(base+'/signin-with-chatgpt?return_to=/',{redirect:'manual'});
+assert.equal(legacy.status,302,'legacy sign-in path still resolves');
+assert.equal(legacy.headers.get('location'),'/signin?return_to=%2F','legacy sign-in path forwards to the app sign-in');
+const crossSite=await fetch(base+'/api/auth/signin',{method:'POST',redirect:'manual',headers:{'Content-Type':'application/x-www-form-urlencoded',Origin:'https://attacker.invalid'},body:new URLSearchParams({email:'a@example.com'})});
+assert.equal(crossSite.status,403,'cross-site sign-in rejected');
+const badEmail=await fetch(base+'/api/auth/signin',{method:'POST',redirect:'manual',headers:{'Content-Type':'application/x-www-form-urlencoded',Origin:base},body:new URLSearchParams({email:'not-an-email'})});
+assert.equal(badEmail.headers.getSetCookie().length,0,'invalid email issues no session');
+const cookies=await signIn(base);
+assert.ok(cookies,'application sign-in cookie');
 async function call(path,method='GET',body){const r=await fetch(base+path,{method,headers:{Cookie:cookies,...(body?{'Content-Type':'application/json',Origin:base}:{})},body:body?JSON.stringify(body):undefined});const data=await r.json();assert.ok(r.ok,JSON.stringify(data));return data;}
 const suffix=crypto.randomUUID().slice(0,8);
 const trip=await call('/api/trips','POST',{name:'자동검증 '+suffix,startDate:'2026-09-11',endDate:'2026-09-12'});
@@ -37,3 +44,10 @@ assert.equal((await fetch(base+'/api/collection',{method:'POST',headers:{Cookie:
 assert.equal((await fetch(base+'/api/collection',{method:'POST',headers:{Cookie:cookies,'Content-Type':'application/json',Origin:'https://attacker.invalid'},body:JSON.stringify(collectRequest)})).status,403);
 assert.equal((await fetch(base+'/api/collection',{method:'POST',headers:{Cookie:cookies,'Content-Type':'application/json'},body:JSON.stringify(collectRequest)})).status,403);
 console.log('Collection API passed: authenticated server connection, date validation, skip validation, CSRF and missing Origin rejection.');
+
+const signedOut=await fetch(base+'/signout?return_to=/',{headers:{Cookie:cookies},redirect:'manual'});
+assert.equal(signedOut.status,302,'sign-out redirects home');
+assert.ok(signedOut.headers.getSetCookie().some(value=>value.startsWith('chuljang_session=')&&value.includes('Max-Age=0')),'sign-out clears the session cookie');
+assert.equal((await fetch(base+'/api/receipts',{headers:{Cookie:'chuljang_session=tampered.value'}})).status,401,'forged session cookie rejected');
+assert.equal((await fetch(base+'/api/receipts',{headers:{'oai-authenticated-user-id':'user_intruder','oai-authenticated-user-email':'intruder@example.invalid'}})).status,401,'platform headers are not trusted unless CHULJANG_TRUST_PLATFORM_AUTH is set');
+console.log('Sign-in, legacy path forwarding, sign-out, forged cookie and spoofed platform header rejection passed.');

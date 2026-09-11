@@ -1,13 +1,15 @@
 import { env } from 'cloudflare:workers';
-import { getChatGPTUser } from '@/app/chatgpt-auth';
+import { getUser } from '@/app/auth';
+import { extraOrigins } from './auth-config';
 export function db(){if(!env.DB)throw new Error('저장소를 사용할 수 없습니다.');return env.DB;}
 export function bucket(){if(!env.BUCKET)throw new Error('파일 저장소를 사용할 수 없습니다.');return env.BUCKET;}
 export async function owner(request?:Request){
- const user=await getChatGPTUser();if(!user)throw new HttpError(401,'로그인 후 이용해 주세요.');
+ const user=await getUser();if(!user)throw new HttpError(401,'로그인 후 이용해 주세요.');
  if(request&&request.method!=='GET'){
   const origin=request.headers.get('origin');
   const expected=new URL(request.url).origin;
-  if(origin&&origin!==expected&&origin!=='https://chuljang-receipts.jhleokim.chatgpt.site')throw new HttpError(403,'허용되지 않은 요청입니다.');
+  // 같은 출처를 기본 허용하고, 다른 도메인으로 서비스할 때만 CHULJANG_APP_ORIGINS로 추가한다.
+  if(origin&&origin!==expected&&!extraOrigins().includes(origin))throw new HttpError(403,'허용되지 않은 요청입니다.');
  }
  return user.userId;
 }

@@ -4,6 +4,7 @@
 
 ## 기능
 
+- 앱이 직접 처리하는 이메일·접속 코드 로그인. 특정 호스팅 제공자의 로그인에 의존하지 않습니다.
 - 코레일·KOBUS·대한항공 기본 연결, 아시아나·쏘카 기업 웹 선택 연결.
 - 서버 원격 로그인, 암호화된 인증 상태 재사용, 사용자·서비스별 작업 분리와 연결 해제.
 - 실제 이용일을 선택 날짜 집합과 대조. 명확한 내역은 자동 저장하고 불명확한 내역은 검토.
@@ -28,17 +29,22 @@ Node.js 22.13+와 npm이 필요합니다.
 
 1. npm run install:ci
 2. npm run build
-3. 새 로컬 DB 최초 마이그레이션: node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_fluffy_fallen_one.sql
+3. npm run db:migrate — 로컬 D1에 스키마를 적용합니다.
 4. 수집 서버를 사용하려면 [서버 설정](docs/zero-install-collection.md)에 따라 .dev.vars를 구성합니다.
 5. npm run dev
 
-로컬 /signin-with-chatgpt?return_to=/에서 개발 로그인합니다. 운영은 Sites 인증과 접근 제어를 사용합니다. Windows npm.cmd 오류 시 Node로 실제 npm-cli.js를 실행하세요.
+로컬 http://localhost:5173/signin 에서 이메일만 입력하면 로그인됩니다. 배포 환경에서는 CHULJANG_AUTH_SECRET과 CHULJANG_ACCESS_CODE가 필요합니다. Windows npm.cmd 오류 시 Node로 실제 npm-cli.js를 실행하세요.
+
+## 로그인과 배포
+
+로그인은 앱이 서명한 세션 쿠키로 처리하고, 배포는 Cloudflare Workers 계정만 있으면 됩니다. 환경 변수, 기존 계정 데이터 이어받기, 배포 절차는 [직접 배포와 로그인](docs/self-hosting.md)에 있습니다. 기존 ChatGPT Sites 배포를 그대로 유지하려면 CHULJANG_TRUST_PLATFORM_AUTH=1을 설정해야 플랫폼 로그인 헤더를 계속 신뢰합니다.
 
 ## 검증
 
-- node --experimental-strip-types --test tests/*.test.mjs
-- node node_modules/typescript/bin/tsc --noEmit
-- node tests/api-smoke.mjs — 로컬 5173 서버와 D1에 합성 데이터 생성.
+- npm test — 단위 테스트(세션 서명·이메일 검증·수집·인식 회귀 포함).
+- npm run typecheck
+- node tests/api-smoke.mjs — 로컬 5173 서버와 D1에 합성 데이터 생성. 수집 서버 설정(.dev.vars)이 있어야 전 구간을 통과합니다.
+- node tests/attachment-smoke.mjs — 로그인·첨부 업로드·다운로드 확인.
 
 server-collector/는 설치 없는 서버 수집 구현입니다. collector/의 날짜·화면 읽기 모듈을 공유합니다. 기존 Chrome 확장 실험 코드는 호환 목적으로 보존했으며 제품 사용에 필요하지 않습니다.
 

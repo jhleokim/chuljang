@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
+import { signIn } from './sign-in.mjs';
 const base='http://localhost:5173';
-const login=await fetch(base+'/signin-with-chatgpt?return_to=/',{redirect:'manual'});
-const cookie=login.headers.getSetCookie().map(v=>v.split(';')[0]).join('; ');
+const cookie=await signIn(base);
 const ref=crypto.randomUUID();
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6e2kAAAAASUVORK5CYII=','base64');
 const form=new FormData();form.set('receipts',JSON.stringify([{source:'socar',date:'2026-09-11',merchant:'첨부 검증',amount:100,reference:ref,raw:'합성 테스트',attachmentIndex:0}]));form.append('files',new Blob([png],{type:'image/png'}),'synthetic.png');

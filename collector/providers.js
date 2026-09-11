@@ -1,4 +1,6 @@
-export const DESTINATION = 'https://chuljang-receipts.jhleokim.chatgpt.site';
+// 호환용으로 남긴 확장 코드의 배포 주소. 자체 도메인으로 옮길 때는 이 값과
+// manifest.json의 host_permissions·matches를 함께 바꾼다.
+export const DESTINATION = globalThis.CHULJANG_DESTINATION || 'https://chuljang-receipts.jhleokim.chatgpt.site';
 export const SOURCES = [
   { id: 'korail', source: 'ktx', name: 'KTX · 코레일', hosts: ['www.korail.com', 'korail.com', 'www.letskorail.com'], startUrl: 'https://www.korail.com/ticket/mypage/ticketInfo/receipt', enabled: true },
   { id: 'kobus', source: 'tmoney', name: '티머니 · 고속버스', hosts: ['www.kobus.co.kr', 'kobus.co.kr'], startUrl: 'https://www.kobus.co.kr/mbrs/trprinqr/pymPtInqr.do', enabled: true },
