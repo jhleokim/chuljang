@@ -1,6 +1,6 @@
 import { candidateSchema, type Candidate, type Source } from './receipts.ts';
 
-export type Draft = Partial<Candidate> & { source: Source; key: string; issues: string[]; pageNumber?: number };
+export type Draft = Partial<Candidate> & { source: Source; key: string; issues: string[]; pageNumber?: number; captureId?: string };
 export type DraftField = 'date' | 'amount' | 'merchant' | 'reference';
 const messages: Record<DraftField, string> = {
   date: '올바른 이용일을 입력해 주세요.',
