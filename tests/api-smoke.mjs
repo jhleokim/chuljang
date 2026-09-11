@@ -21,3 +21,10 @@ const csrf=await fetch(base+'/api/trips',{method:'POST',headers:{Cookie:cookies,
 const invalid=await fetch(base+'/api/receipts',{method:'POST',headers:{Cookie:cookies,'Content-Type':'application/json',Origin:base},body:JSON.stringify([{...candidate,amount:-10}])});assert.equal(invalid.status,400);
 console.log('API smoke passed: sign-in, owner isolation, trip create, receipt import, retry deduplication, corrected fields, review update, anonymous attachment rejection, CSRF, validation.');
 
+
+const wrongScope=await fetch(base+'/api/receipts',{method:'POST',headers:{Cookie:cookies,'Content-Type':'application/json',Origin:base},body:JSON.stringify([{...candidate,requestedDates:['2026-09-09']}])});assert.equal(wrongScope.status,400,'per-row travel scope rejects gap days');
+const scopedBody=new FormData();scopedBody.set('receipts',JSON.stringify([candidate]));scopedBody.set('requestedDates',JSON.stringify(['2026-09-09']));
+const wrongBatch=await fetch(base+'/api/receipts',{method:'POST',headers:{Cookie:cookies,Origin:base},body:scopedBody});assert.equal(wrongBatch.status,400,'multipart batch travel scope rejects gap days');
+scopedBody.set('requestedDates',JSON.stringify(['2026-09-09','2026-09-11']));
+const rightBatch=await fetch(base+'/api/receipts',{method:'POST',headers:{Cookie:cookies,Origin:base},body:scopedBody});assert.equal(rightBatch.status,200,'exact selected day accepted');
+console.log('Selected-date API validation passed.');

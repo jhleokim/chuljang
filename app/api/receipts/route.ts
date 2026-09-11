@@ -1,6 +1,7 @@
 import { db,bucket,owner,failure,boundedBody,jsonBody,HttpError } from '@/lib/server';
 import { candidateSchema,redact,safeSourceUrl } from '@/lib/receipts';
 import { z } from 'zod';
+import { normalizeDates } from '../../../collector/date-scope.js';
 const rowsSchema=z.array(candidateSchema).min(1).max(100);
 export async function GET(){try{const user=await owner();const result=await db().prepare("SELECT id,source,date,merchant,amount,reference,'' AS raw,source_url AS sourceUrl,trip_id AS tripId,reviewed,created_at AS createdAt,attachment_key IS NOT NULL AS hasAttachment FROM receipts WHERE user_id=? ORDER BY date DESC,created_at DESC LIMIT 5000").bind(user).all();return Response.json(result.results,{headers:{'Cache-Control':'no-store'}});}catch(e){return failure(e);}}
 export async function POST(req:Request){
@@ -8,14 +9,20 @@ export async function POST(req:Request){
  try{
   const user=await owner(req);
   const type=req.headers.get('content-type')||'';
-  let data:unknown;let files:File[]=[];
+  let data:unknown;let files:File[]=[];let requestedDates:string[]|undefined;
   if(type.startsWith('multipart/form-data')){
    const bytes=await boundedBody(req,14*1024*1024);
    const form=await new Request(req.url,{method:'POST',headers:{'content-type':type},body:bytes}).formData();
    try{data=JSON.parse(String(form.get('receipts')||''));}catch{throw new HttpError(400,'영수증 데이터가 올바르지 않습니다.');}
+   if(form.has('requestedDates')){try{requestedDates=normalizeDates(JSON.parse(String(form.get('requestedDates'))));}catch{throw new HttpError(400,'출장 날짜를 확인해 주세요.');}}
    files=form.getAll('files').filter((f):f is File=>typeof f!=='string');
   }else{data=await jsonBody(req);}
   const parsed=rowsSchema.safeParse(data);if(!parsed.success)throw new HttpError(400,'날짜·금액·사용처를 확인해 주세요. 한 번에 100건까지 저장할 수 있습니다.');
+  for(const [i,row] of parsed.data.entries()){
+   const input=(data as Record<string,unknown>[])[i];let scope=requestedDates;
+   if(input.requestedDates!==undefined){try{scope=normalizeDates(input.requestedDates);}catch{throw new HttpError(400,'출장 날짜를 확인해 주세요.');}}
+   if((requestedDates&&!requestedDates.includes(row.date))||(scope&&!scope.includes(row.date)))throw new HttpError(400,'선택한 출장 날짜에 해당하지 않는 영수증이 있어요.');
+  }
   if(files.length>20||files.reduce((n,f)=>n+f.size,0)>12*1024*1024)throw new HttpError(413,'첨부파일은 합계 12MB, 20개까지 가능합니다.');
   const allowed=['image/jpeg','image/png','image/webp','application/pdf'];
   if(files.some(f=>!allowed.includes(f.type)))throw new HttpError(400,'JPG, PNG, WEBP, PDF 파일만 첨부할 수 있습니다.');

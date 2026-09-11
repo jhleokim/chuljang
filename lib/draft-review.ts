@@ -1,6 +1,6 @@
 import { candidateSchema, type Candidate, type Source } from './receipts.ts';
 
-export type Draft = Partial<Candidate> & { source: Source; key: string; issues: string[]; pageNumber?: number; captureId?: string };
+export type Draft = Partial<Candidate> & { source: Source; key: string; issues: string[]; pageNumber?: number; captureId?: string; requestedDates?: string[] };
 export type DraftField = 'date' | 'amount' | 'merchant' | 'reference';
 const messages: Record<DraftField, string> = {
   date: '올바른 이용일을 입력해 주세요.',
@@ -10,9 +10,9 @@ const messages: Record<DraftField, string> = {
 };
 export function draftErrors(draft: Draft): Partial<Record<DraftField, string>> {
   const result = candidateSchema.safeParse(draft);
-  if (result.success) return {};
   const errors: Partial<Record<DraftField, string>> = {};
-  for (const issue of result.error.issues) {
+  if (draft.requestedDates && !draft.requestedDates.includes(draft.date || '')) errors.date = '수집할 때 선택한 출장 날짜 중 실제 이용일을 선택해 주세요.';
+  for (const issue of result.success ? [] : result.error.issues) {
     const field = issue.path[0] as DraftField;
     if (field in messages) errors[field] = messages[field];
   }

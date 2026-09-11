@@ -23,4 +23,4 @@ export function safeReadLink(value, label, source) {
   return /영수증|이용\s*내역|구매\s*내역|결제\s*내역|거래\s*내역|예약\s*조회|예약\s*내역|나의\s*예약|지난\s*예약|매출전표|거래확인증|상세\s*(보기|내역)|다음\s*(페이지)?|receipt|payment\s*history|my\s*(trips|bookings)|booking\s*history|next/i.test(label);
 }
 export const LIVE_STATES = ['opening', 'scanning', 'login', 'attention'];
-export const stateNames = { opening: '페이지 여는 중', scanning: '내역 찾는 중', login: '서비스 로그인 필요', attention: '공식 화면 확인 필요', complete: '조회 완료', empty: '조회 내역 없음', limit: '이번 수집 한도 도달', error: '다시 확인 필요', stopped: '중단됨', expired: '다시 수집 필요' };
+export const stateNames = { opening: '페이지 여는 중', scanning: '내역 찾는 중', login: '서비스 로그인 필요', attention: '공식 화면 확인 필요', partial: '조회 범위 확인 필요', complete: '조회 완료', empty: '조회 내역 없음', limit: '이번 수집 한도 도달', error: '다시 확인 필요', stopped: '중단됨', expired: '다시 수집 필요' };
