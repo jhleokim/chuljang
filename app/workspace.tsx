@@ -11,16 +11,17 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { candidateSchema, exportCsv, parseReceipt, sourceIds, sourceNames, tripSchema, type Receipt, type Source, type Trip } from '@/lib/receipts';
+import { candidateSchema, parseReceipt, sourceIds, sourceNames, tripSchema, type Receipt, type Source, type Trip } from '@/lib/receipts';
 import { providers } from '@/lib/providers';
 import { readReceiptFile } from '@/lib/read-file';
 import { draftErrors, type Draft } from '@/lib/draft-review';
 import { ReceiptOriginal, ReceiptReview } from '@/components/receipt-review';
 import { ChromeCollection } from '@/components/chrome-collection';
 import { automaticImportBody, prepareAutomaticImport } from '@/lib/auto-import';
+import { normalizeDates } from '../collector/date-scope.js';
 const icons={ktx:TrainFront,kakaot:CarFront,tmoney:BusFront,airline:Plane,socar:CarFront};
 
-type Packet={source:Source;blocks:string[];sourceUrl?:string;automatic?:boolean};
+type Packet={source:Source;blocks:string[];sourceUrl?:string;automatic?:boolean;requestedDates?:string[]};
 const format=(n:number)=>new Intl.NumberFormat('ko-KR').format(n);
 async function api<T>(path:string,init?:RequestInit):Promise<T>{
  const r=await fetch(path,init);const body:unknown=await r.json();if(!r.ok)throw new Error(body&&typeof body==='object'&&'error' in body?String(body.error):'처리하지 못했습니다.');return body as T;
@@ -30,9 +31,12 @@ function packetValue(value:unknown):Packet{
  const p=value as Record<string,unknown>;
  if(!sourceIds.includes(p.source as Source)||!Array.isArray(p.blocks)||!p.blocks.length||p.blocks.length>100||p.blocks.some(x=>typeof x!=='string'||x.length>12000))throw new Error('유효한 수집 데이터가 아닙니다. 한 번에 100건까지 가져올 수 있어요.');
  if(typeof p.sourceUrl==='string'&&p.sourceUrl.length>2000)throw new Error('원본 주소가 너무 깁니다. 주소 없이 다시 가져와 주세요.');
- return {source:p.source as Source,blocks:p.blocks as string[],sourceUrl:typeof p.sourceUrl==='string'?p.sourceUrl:'',automatic:p.version===2&&p.automatic===true};
+ return {source:p.source as Source,blocks:p.blocks as string[],sourceUrl:typeof p.sourceUrl==='string'?p.sourceUrl:'',automatic:p.version===3&&p.automatic===true,requestedDates:p.version===3?normalizeDates(p.requestedDates):undefined};
 }
 export default function Workspace({signedIn}:{signedIn:boolean}) {
+ const [requestedDates,setRequestedDates]=useState<string[]>([]);
+ useEffect(()=>{try{const saved=sessionStorage.getItem('chuljang-dates');if(saved)setRequestedDates(normalizeDates(JSON.parse(saved)));}catch{}},[]);
+ function chooseDates(days:string[]){setRequestedDates(days);try{sessionStorage.setItem('chuljang-dates',JSON.stringify(days));}catch{}}
  const [receipts,setReceipts]=useState<Receipt[]>([]),[trips,setTrips]=useState<Trip[]>([]);
  const [loading,setLoading]=useState(signedIn),[loadError,setLoadError]=useState('');
  const [modal,setModal]=useState<'collect'|'trip'|'edit'|'signin'|null>(null),[source,setSource]=useState<Source>('ktx');
@@ -59,14 +63,17 @@ export default function Workspace({signedIn}:{signedIn:boolean}) {
  },[modal,editing?.id]);
  const activeCapture=useRef(false),receivedCaptures=useRef(new Set<string>()),resolvedCaptures=useRef(new Set<string>());
  const inputRef=useRef<HTMLInputElement>(null),packetRef=useRef<HTMLInputElement>(null);
- const pageState=useRef({receipts,trips});pageState.current={receipts,trips};
+ const pageState=useRef({receipts,trips,requestedDates});pageState.current={receipts,trips,requestedDates};
  const refresh=useCallback(async()=>{if(!signedIn)return;setLoading(true);setLoadError('');try{const [rs,ts]=await Promise.all([api<Receipt[]>('/api/receipts'),api<Trip[]>('/api/trips')]);setReceipts(rs);setTrips(ts);}catch(e){setLoadError((e as Error).message);}finally{setLoading(false);}},[signedIn]);
  useEffect(()=>{void refresh();},[refresh]);
  const stage=useCallback((p:Packet)=>{
   if(!signedIn)throw new Error('먼저 로그인한 뒤 가져와 주세요.');
   if(workflow.current.busy||workflow.current.draftCount||workflow.current.text.trim())throw new Error('검토 중인 내역이 있어요. 저장하거나 비운 뒤 다시 가져와 주세요.');
-  workflow.current.draftCount=p.blocks.length;setDraftIndex(0);
-  const rows=p.blocks.map(block=>({...parseReceipt(block,p.source),sourceUrl:p.sourceUrl||'',key:crypto.randomUUID()}));
+  setDraftIndex(0);
+  const scoped=p.requestedDates?prepareAutomaticImport(p.source,p.blocks,p.sourceUrl,p.requestedDates):null;
+  const rows=(scoped?[...scoped.ready.map(row=>({...row,issues:[]})),...scoped.review]:p.blocks.map(block=>({...parseReceipt(block,p.source),sourceUrl:p.sourceUrl||''}))).map(row=>({...row,requestedDates:p.requestedDates,key:crypto.randomUUID()}));
+  if(!rows.length)throw new Error('선택한 출장 날짜에 해당하는 내역이 없어요.');
+  workflow.current.draftCount=rows.length;
   setSource(p.source);setDrafts(rows);setFiles([]);setImportErrors([]);setModal('collect');setMethod('text');
   return rows.length;
  },[signedIn]);
@@ -78,11 +85,11 @@ export default function Workspace({signedIn}:{signedIn:boolean}) {
   if(receivedCaptures.current.has(captureId)){window.postMessage({type:'CHULJANG_REVIEW_PENDING',captureId},location.origin);return;}
   activeCapture.current=true;workflow.current.busy=true;setBusy(true);
   try{
-   const result=p.automatic?prepareAutomaticImport(p.source,p.blocks,p.sourceUrl):{ready:[],review:p.blocks.map(block=>({...parseReceipt(block,p.source),sourceUrl:p.sourceUrl||''}))};
-   if(result.ready.length){const saved=await api<{imported:number;duplicates:number}>('/api/receipts',{method:'POST',body:automaticImportBody(result.ready)});if(saved.imported)toast.success(saved.imported+'건 자동 저장했어요.');await refresh();}
+   const result=p.automatic?prepareAutomaticImport(p.source,p.blocks,p.sourceUrl,p.requestedDates):{ready:[],review:p.blocks.map(block=>({...parseReceipt(block,p.source),sourceUrl:p.sourceUrl||''}))};
+   if(result.ready.length){const saved=await api<{imported:number;duplicates:number}>('/api/receipts',{method:'POST',body:automaticImportBody(result.ready,p.requestedDates)});if(saved.imported)toast.success(saved.imported+'건 자동 저장했어요.');await refresh();}
    receivedCaptures.current.add(captureId);
    if(result.review.length){
-    const rows=result.review.map(row=>({...row,captureId,key:crypto.randomUUID()}));
+    const rows=result.review.map(row=>({...row,captureId,requestedDates:p.requestedDates,key:crypto.randomUUID()}));
     setDrafts(current=>[...current,...rows]);workflow.current.draftCount+=rows.length;
     await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
     window.postMessage({type:'CHULJANG_REVIEW_PENDING',captureId},location.origin);
@@ -150,8 +157,9 @@ export default function Workspace({signedIn}:{signedIn:boolean}) {
  async function saveDrafts(){
   if(busy||!drafts.length)return;
   if(!signedIn){toast.error('로그인 후 저장할 수 있습니다.');return;}
+  const scopedInvalid=drafts.findIndex(r=>r.requestedDates&&!r.requestedDates.includes(r.date||''));if(scopedInvalid!==-1){setDraftIndex(scopedInvalid);toast.error('이 영수증을 수집한 출장 날짜 중 실제 이용일을 선택해 주세요. 해당하지 않으면 목록에서 제외하세요.');return;}
   const parsed=drafts.map(r=>candidateSchema.safeParse(r));const invalid=parsed.findIndex(r=>!r.success);if(invalid!==-1){setDraftIndex(invalid);const field=Object.keys(draftErrors(drafts[invalid]))[0];requestAnimationFrame(()=>document.getElementById('draft-'+field)?.focus());toast.error((invalid+1)+'번째 영수증의 표시된 항목을 입력해 주세요.');return;}
-  setBusy(true);workflow.current.busy=true;try{const result={imported:0,duplicates:0};for(let offset=0;offset<parsed.length;offset+=100){const body=new FormData();body.set('receipts',JSON.stringify(parsed.slice(offset,offset+100).map(r=>r.data)));files.forEach(file=>body.append('files',file));const saved=await api<{imported:number;duplicates:number}>('/api/receipts',{method:'POST',body});result.imported+=saved.imported;result.duplicates+=saved.duplicates;}toast.success(result.imported+'건 저장'+(result.duplicates?' · 동일 내역 '+result.duplicates+'건 제외':''));for(const captureId of new Set(drafts.map(row=>row.captureId).filter((id):id is string=>!!id)))acknowledgeCapture(captureId);setDrafts([]);setFiles([]);setText('');workflow.current={busy:true,draftCount:0,text:''};setModal(null);await refresh();}catch(e){toast.error((e as Error).message);}finally{setBusy(false);}
+  setBusy(true);workflow.current.busy=true;try{const result={imported:0,duplicates:0};for(let offset=0;offset<parsed.length;offset+=100){const body=new FormData();body.set('receipts',JSON.stringify(parsed.slice(offset,offset+100).map((r,i)=>({...r.data,requestedDates:drafts[offset+i].requestedDates}))));files.forEach(file=>body.append('files',file));const saved=await api<{imported:number;duplicates:number}>('/api/receipts',{method:'POST',body});result.imported+=saved.imported;result.duplicates+=saved.duplicates;}toast.success(result.imported+'건 저장'+(result.duplicates?' · 동일 내역 '+result.duplicates+'건 제외':''));for(const captureId of new Set(drafts.map(row=>row.captureId).filter((id):id is string=>!!id)))acknowledgeCapture(captureId);setDrafts([]);setFiles([]);setText('');workflow.current={busy:true,draftCount:0,text:''};setModal(null);await refresh();}catch(e){toast.error((e as Error).message);}finally{setBusy(false);}
  }
  async function createTrip(event:React.FormEvent){
   event.preventDefault();if(!signedIn){toast.error('로그인 후 저장할 수 있습니다.');return;}
@@ -162,23 +170,24 @@ export default function Workspace({signedIn}:{signedIn:boolean}) {
   event.preventDefault();if(!editing)return;setBusy(true);
   try{await api('/api/receipts/'+editing.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({...editing,reviewed:!!editing.reviewed})});setModal(null);await refresh();toast.success('영수증이 수정되었습니다.');}catch(e){toast.error((e as Error).message);}finally{setBusy(false);}
  }
- const displayed=receipts.filter(r=>(filter==='all'||r.source===filter)&&(tripFilter==='all'||(tripFilter==='none'?!r.tripId:r.tripId===tripFilter))&&(statusFilter==='all'||!r.reviewed));
+ const displayed=receipts.filter(r=>(!requestedDates.length||requestedDates.includes(r.date))&&(filter==='all'||r.source===filter)&&(tripFilter==='all'||(tripFilter==='none'?!r.tripId:r.tripId===tripFilter))&&(statusFilter==='all'||!r.reviewed));
  const total=receipts.reduce((n,r)=>n+r.amount,0),review=receipts.filter(r=>!r.reviewed).length;
  const hasFilters=filter!=='all'||tripFilter!=='all'||statusFilter!=='all';
  function resetFilters(){setFilter('all');setTripFilter('all');setStatusFilter('all');}
  const provider=providers.find(p=>p.id===source)!;
- function download(){const blob=new Blob([exportCsv(displayed,trips)],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='출장_정산내역_'+new Date().toISOString().slice(0,10)+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
  return <div className="app-shell">
   <Toaster theme="light" richColors position="top-center"/>
   <header className="topbar"><a className="brand" href="/"><span className="brand-icon"><BriefcaseBusiness size={21}/></span>출장<span className="brand-en">CHULJANG</span></a><div className="topbar-right"><span className="private-label">나의 정산 공간</span>{signedIn?<span className="avatar">나</span>:<a className="signin-link" href="/signin-with-chatgpt?return_to=/" target="_top">로그인</a>}</div></header>
-  <main className="workspace"><div className="page-heading"><div><p className="eyebrow">TRAVEL EXPENSES</p><h1>출장 영수증</h1><p className="subheading">이동은 가볍게. 영수증은 한곳에.</p></div><Button className="primary-button" onClick={()=>openCollect()}><Plus size={18}/> 영수증 가져오기</Button></div>
+  <main className="workspace"><div className="page-heading"><div><p className="eyebrow">TRAVEL EXPENSES</p><h1>출장 영수증</h1><p className="subheading">날짜만 고르면, 출장 정산이 시작됩니다.</p></div><Button className="primary-button" onClick={()=>openCollect()}><Plus size={18}/> 영수증 가져오기</Button></div>
   {!signedIn&&<div className="notice">가져온 영수증을 내 공간에 보관할 수 있도록 먼저 <a href="/signin-with-chatgpt?return_to=/" target="_top">로그인해 주세요.</a></div>}
   {loadError&&<div className="notice error" role="alert"><span>{loadError}</span><Button variant="outline" size="sm" onClick={()=>void refresh()}>다시 불러오기</Button></div>}
   {(drafts.length>0||text.trim())&&<div className="resume-banner"><div><FileText size={21}/><span><strong>{drafts.length?drafts.length+'건 검토 중':'작성 중인 영수증이 있어요'}</strong><small>파일 초안은 이 화면에, Chrome 수집 내역은 30분간 임시 보관</small></span></div><Button variant="outline" onClick={()=>openCollect()}>이어서 검토 <ArrowUpRight size={16}/></Button></div>}
+  <ChromeCollection signedIn={signedIn} signIn={()=>setModal('signin')} upload={()=>openCollect()} requestedDates={requestedDates} onDatesChange={chooseDates}/>
+  <section className="report-next"><FileText size={23}/><div><span>03 · 지정 양식으로 저장·공유</span><h2>사용할 정산 양식을 기다리고 있어요.</h2><p>양식이 지정된 뒤 파일 저장과 웹메일 공유를 연결합니다. 현재는 영수증 수집·보관까지 사용할 수 있어요.</p></div><span className="report-pending">양식 미지정</span></section>
   <div className="summary-grid"><div className="summary-card"><span>모은 영수증</span><strong>{loading?<Skeleton className="h-9 w-20"/>:format(receipts.length)}<small>건</small></strong><FileText/></div><div className="summary-card"><span>총 지출 · KRW</span><strong>{loading?<Skeleton className="h-9 w-28"/>:format(total)}<small>원</small></strong><Wallet/></div><button className="summary-card review-summary" onClick={()=>{setStatusFilter('review');document.getElementById('receipt-ledger')?.scrollIntoView({behavior:'smooth',block:'start'});}}><span>검토할 내역 <ArrowUpRight size={13}/></span><strong>{loading?<Skeleton className="h-9 w-20"/>:format(review)}<small>건</small></strong><CreditCard/></button></div>
-  <ChromeCollection signedIn={signedIn} signIn={()=>setModal('signin')} upload={()=>openCollect()}/>
+
   <section className="source-grid" aria-label="수집 서비스">{providers.map(p=>{const Icon=icons[p.id];const count=receipts.filter(r=>r.source===p.id).length;return <button key={p.id} className="source-card" onClick={()=>openCollect(p.id,p.id==='kakaot'||p.id==='socar'?'file':'web')}><div className="source-top"><Icon size={23} style={{color:p.color}}/><span>{p.mode}</span></div><strong>{p.name}</strong><p>{count?count+'건 보관 중':'수집 방법 보기'} <ArrowUpRight size={14}/></p></button>;})}</section>
-  <div className="content-grid"><section className="ledger" id="receipt-ledger"><Tabs value={statusFilter} onValueChange={setStatusFilter}><div className="ledger-heading"><TabsList variant="line"><TabsTrigger value="all">전체 영수증 <span className="count">{receipts.length}</span></TabsTrigger><TabsTrigger value="review">검토 필요 <span className="count">{review}</span></TabsTrigger></TabsList><Button variant="ghost" disabled={!displayed.length} onClick={download}><ArrowDownToLine size={16}/> CSV 내보내기</Button></div>
+  <div className="content-grid"><section className="ledger" id="receipt-ledger"><Tabs value={statusFilter} onValueChange={setStatusFilter}><div className="ledger-heading"><TabsList variant="line"><TabsTrigger value="all">전체 영수증 <span className="count">{receipts.length}</span></TabsTrigger><TabsTrigger value="review">검토 필요 <span className="count">{review}</span></TabsTrigger></TabsList><span className="ledger-date-scope">{requestedDates.length ? `선택한 ${requestedDates.length}일의 내역` : '보관한 전체 내역'}</span></div>
   <div className="filterbar"><Select value={filter} onValueChange={setFilter}><SelectTrigger aria-label="서비스 필터"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">전체 서비스</SelectItem>{providers.map(p=><SelectItem value={p.id} key={p.id}>{p.name}</SelectItem>)}</SelectContent></Select><Select value={tripFilter} onValueChange={setTripFilter}><SelectTrigger aria-label="출장 필터"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">모든 출장</SelectItem><SelectItem value="none">미분류</SelectItem>{trips.map(t=><SelectItem value={t.id} key={t.id}>{t.name}</SelectItem>)}</SelectContent></Select>{hasFilters&&<Button variant="ghost" size="sm" onClick={resetFilters}><X size={14}/> 초기화</Button>}{displayed.length>0&&<span className="filtered-total">{displayed.length}건 · {format(displayed.reduce((n,r)=>n+r.amount,0))}원</span>}</div>
   {loading?<div className="loading-rows">{[1,2,3].map(n=><Skeleton key={n} className="h-12 w-full"/>)}</div>:displayed.length?<><div className="mobile-receipts">{displayed.map(r=>{const Icon=icons[r.source];return <button className="mobile-receipt" key={r.id} onClick={()=>{setEditing({...r});setModal('edit');}}><span className="mobile-receipt-top"><span className={'service-icon '+r.source}><Icon size={18}/></span><span className="mobile-receipt-title"><strong>{r.merchant}</strong><small>{sourceNames[r.source]} · {r.date}</small></span><ArrowUpRight size={17}/></span><span className="mobile-receipt-bottom"><span className={r.reviewed?'badge verified':'badge pending'}>{r.reviewed?'확인 완료':'검토 필요'}</span><strong>{format(r.amount)}<small> 원</small></strong><span className="mobile-review-label">{r.reviewed?'보기':'검토'} →</span></span>{r.tripId&&<span className="mobile-trip">{trips.find(t=>t.id===r.tripId)?.name}</span>}</button>;})}</div><div className="desktop-receipts"><Table className="receipt-table"><TableHeader><TableRow><TableHead>이용내역</TableHead><TableHead>이용일</TableHead><TableHead>금액</TableHead><TableHead>상태</TableHead><TableHead><span className="sr-only">수정</span></TableHead></TableRow></TableHeader><TableBody>{displayed.map(r=>{const Icon=icons[r.source];return <TableRow key={r.id}><TableCell><div className="merchant-cell"><span className={'service-icon '+r.source}><Icon size={18}/></span><div><strong>{r.merchant}</strong><span>{sourceNames[r.source]}{r.tripId?' · '+(trips.find(t=>t.id===r.tripId)?.name||''):''}</span></div></div></TableCell><TableCell className="date-cell">{r.date}</TableCell><TableCell className="amount-cell">{format(r.amount)}<small> 원</small></TableCell><TableCell><span className={r.reviewed?'badge verified':'badge pending'}>{r.reviewed?'확인 완료':'검토 필요'}</span></TableCell><TableCell><button aria-label={r.merchant+' 영수증 수정'} className="edit-button" onClick={()=>{setEditing({...r});setModal('edit');}}><Pencil size={15}/><span>{r.reviewed?'보기':'검토'}</span></button></TableCell></TableRow>;})}</TableBody></Table></div></>:<Empty className="receipt-empty"><EmptyHeader><EmptyMedia variant="icon"><FileText/></EmptyMedia><EmptyTitle>{receipts.length?'조건에 맞는 영수증이 없어요':'첫 영수증을 모아볼까요?'}</EmptyTitle><EmptyDescription>{receipts.length?'서비스·출장·검토 필터를 변경해 보세요.':<>승차권부터 택시비까지, 가져온 내역을<br/>출장별로 정리할 수 있어요.</>}</EmptyDescription></EmptyHeader><Button onClick={()=>receipts.length?resetFilters():openCollect()}>{receipts.length?'필터 초기화':'영수증 가져오기'} {receipts.length?<X size={16}/>:<Plus size={16}/>}</Button></Empty>}</Tabs></section>
   <aside className="trip-panel"><div className="section-heading"><h2>나의 출장</h2><button aria-label="출장 등록" onClick={()=>setModal('trip')}><Plus size={20}/></button></div><p>출장 기간을 등록하면 새로 가져오는 영수증을 이용 날짜에 맞춰 모아줍니다.</p>{trips.length?<div className="trip-list">{trips.map(t=><button className={tripFilter===t.id?'trip-card selected':'trip-card'} onClick={()=>setTripFilter(tripFilter===t.id?'all':t.id)} key={t.id}><span><BriefcaseBusiness size={16}/>{t.name}</span><small>{t.startDate} ~ {t.endDate}</small><strong>{format(receipts.filter(r=>r.tripId===t.id).reduce((n,r)=>n+r.amount,0))}<em>원</em></strong></button>)}<Button variant="outline" onClick={()=>setModal('trip')}><Plus size={16}/> 출장 등록</Button></div>:<div className="trip-placeholder"><span>아직 등록한 출장이 없어요</span><Button variant="outline" onClick={()=>setModal('trip')}><Plus size={16}/> 출장 등록</Button></div>}<div className="tip"><Check size={17}/><span>겹치는 출장 기간은 자동 분류하지 않아요.<br/>검토 후 직접 선택해 주세요.</span></div></aside></div>

@@ -45,6 +45,7 @@ export function ReceiptReview({ drafts, files, index, setIndex, busy, update, re
       <div className="review-fields">
         <div className="review-field-heading"><span className="badge">{sourceNames[draft.source]}</span><Button variant="ghost" size="sm" disabled={busy} onClick={() => remove(draft.key)}><Trash2 size={14}/> 제외</Button></div>
         <div className="form-grid">
+          {draft.requestedDates && <div className="date-choices" aria-label="수집한 출장 날짜">{draft.requestedDates.map(day=><button type="button" key={day} disabled={busy} onClick={()=>update(draft.key,{date:day})}>{day}</button>)}</div>}
           <label htmlFor="draft-date">이용일<input {...inputProps('date')} type="date" value={draft.date || ''} disabled={busy} onChange={event => update(draft.key, { date: event.target.value })}/>{error('date')}</label>
           <label htmlFor="draft-amount">결제 금액 (원)<input {...inputProps('amount')} type="number" inputMode="numeric" min={0} max={100000000} step="1" placeholder="원화 금액 입력" value={draft.amount ?? ''} disabled={busy} onChange={event => update(draft.key, { amount: event.target.value === '' ? undefined : Number(event.target.value) })}/>{error('amount')}</label>
           <label className="full" htmlFor="draft-merchant">이용내역<input {...inputProps('merchant')} value={draft.merchant || ''} maxLength={150} disabled={busy} onChange={event => update(draft.key, { merchant: event.target.value })}/>{error('merchant')}</label>
