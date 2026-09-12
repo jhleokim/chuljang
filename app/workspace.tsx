@@ -19,9 +19,10 @@ import { ReceiptOriginal, ReceiptReview } from '@/components/receipt-review';
 import { TripCollection } from '@/components/chrome-collection';
 import { automaticImportBody, prepareAutomaticImport } from '@/lib/auto-import';
 import { normalizeDates } from '../collector/date-scope.js';
-const icons={ktx:TrainFront,kakaot:CarFront,tmoney:BusFront,airline:Plane,socar:CarFront};
+import { attachmentFile,type ReceiptAttachment } from '@/lib/receipt-attachment';
+const icons={ktx:TrainFront,transit:BusFront,kakaot:CarFront,tmoney:BusFront,airline:Plane,socar:CarFront};
 
-type Packet={source:Source;blocks:string[];sourceUrl?:string;automatic?:boolean;requestedDates?:string[]};
+type Packet={source:Source;blocks:string[];sourceUrl?:string;automatic?:boolean;requestedDates?:string[];attachment?:ReceiptAttachment};
 const format=(n:number)=>new Intl.NumberFormat('ko-KR').format(n);
 async function api<T>(path:string,init?:RequestInit):Promise<T>{
  const r=await fetch(path,init);const body:unknown=await r.json();if(!r.ok)throw new Error(body&&typeof body==='object'&&'error' in body?String(body.error):'처리하지 못했습니다.');return body as T;
@@ -31,7 +32,8 @@ function packetValue(value:unknown):Packet{
  const p=value as Record<string,unknown>;
  if(!sourceIds.includes(p.source as Source)||!Array.isArray(p.blocks)||!p.blocks.length||p.blocks.length>100||p.blocks.some(x=>typeof x!=='string'||x.length>12000))throw new Error('유효한 수집 데이터가 아닙니다. 한 번에 100건까지 가져올 수 있어요.');
  if(typeof p.sourceUrl==='string'&&p.sourceUrl.length>2000)throw new Error('원본 주소가 너무 깁니다. 주소 없이 다시 가져와 주세요.');
- return {source:p.source as Source,blocks:p.blocks as string[],sourceUrl:typeof p.sourceUrl==='string'?p.sourceUrl:'',automatic:p.version===3&&p.automatic===true,requestedDates:p.version===3?normalizeDates(p.requestedDates):undefined};
+ if(p.attachment!==undefined)attachmentFile(p.attachment);
+ return {source:p.source as Source,blocks:p.blocks as string[],sourceUrl:typeof p.sourceUrl==='string'?p.sourceUrl:'',automatic:p.version===3&&p.automatic===true,requestedDates:p.version===3?normalizeDates(p.requestedDates):undefined,attachment:p.attachment as ReceiptAttachment|undefined};
 }
 export default function Workspace({signedIn}:{signedIn:boolean}) {
  const [requestedDates,setRequestedDates]=useState<string[]>([]);
@@ -89,7 +91,7 @@ export default function Workspace({signedIn}:{signedIn:boolean}) {
   activeCapture.current=true;workflow.current.busy=true;setBusy(true);
   try{
    const result=p.automatic?prepareAutomaticImport(p.source,p.blocks,p.sourceUrl,p.requestedDates):{ready:[],review:p.blocks.map(block=>({...parseReceipt(block,p.source),sourceUrl:p.sourceUrl||''}))};
-   if(result.ready.length){const saved=await api<{imported:number;duplicates:number}>('/api/receipts',{method:'POST',body:automaticImportBody(result.ready,p.requestedDates)});if(saved.imported)toast.success(saved.imported+'건 자동 저장했어요.');await refresh();}
+   if(result.ready.length){const file=attachmentFile(p.attachment),body=automaticImportBody(result.ready.map(row=>file?{...row,attachmentIndex:0}:row),p.requestedDates);if(file)body.append('files',file);const saved=await api<{imported:number;duplicates:number}>('/api/receipts',{method:'POST',body});if(saved.imported)toast.success(saved.imported+'건 자동 저장했어요.');await refresh();}
    receivedCaptures.current.add(captureId);
    if(result.review.length){
     const rows=result.review.map(row=>({...row,captureId,requestedDates:p.requestedDates,key:crypto.randomUUID()}));

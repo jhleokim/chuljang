@@ -1,7 +1,8 @@
 export const DESTINATION = 'https://chuljang-receipts.jhleokim.chatgpt.site';
 export const SOURCES = [
   { id: 'korail', source: 'ktx', name: 'KTX · 코레일', hosts: ['www.korail.com', 'korail.com', 'www.letskorail.com'], startUrl: 'https://www.korail.com/ticket/mypage/ticketInfo/receipt', enabled: true },
-  { id: 'kobus', source: 'tmoney', name: '티머니 · 고속버스', hosts: ['www.kobus.co.kr', 'kobus.co.kr'], startUrl: 'https://www.kobus.co.kr/mbrs/trprinqr/pymPtInqr.do', enabled: true },
+  { id: 'tmoneyTransit', source: 'transit', name: '티머니 · 지하철·시내버스', hosts: ['pay.tmoney.co.kr'], startUrl: 'https://pay.tmoney.co.kr/ncs/pct/mtmn/ReadTrprInqr.dev', enabled: true },
+  { id: 'kobus', source: 'tmoney', name: '고속버스 · KOBUS', hosts: ['www.kobus.co.kr', 'kobus.co.kr'], startUrl: 'https://www.kobus.co.kr/mbrs/trprinqr/pymPtInqr.do', enabled: true },
   { id: 'koreanAir', source: 'airline', name: '대한항공', hosts: ['www.koreanair.com'], startUrl: 'https://www.koreanair.com/reservation/list', enabled: true },
   { id: 'asiana', source: 'airline', name: '아시아나항공', hosts: ['flyasiana.com', 'www.flyasiana.com'], startUrl: 'https://flyasiana.com/C/KR/KO/index?site_preference=NORMAL', enabled: false },
   { id: 'socarBiz', source: 'socar', name: '쏘카 비즈니스', hosts: ['business.socar.kr'], startUrl: 'https://business.socar.kr/', enabled: false },

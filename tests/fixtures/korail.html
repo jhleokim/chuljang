@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>코레일 어댑터 테스트 — 모두 합성 데이터</title></head>
+<body>
+<!--
+  SYNTHETIC FIXTURE. No account, reservation, payment, or personal data is real.
+  Markup selectors are derived from the official public bundle:
+  https://cdn.korail.com/bundle/bundle.4f1a2ccdb65e2958c4ae.js?v=1.0.221
+  member component bytes 587138..603521, card Io bytes 559130..565441,
+  receipt wrapper module 177, receipt renderer module 179.
+  Dates, ticket references, train numbers, amounts, and status values below
+  are manufactured test values; the bundle does not enumerate h_tk_stt_nm.
+  Expected for 2026-09-11: two distinct ordinary trips of 59,800 each;
+  a returned ticket must be classified separately, and 2026-09-12 excluded.
+  Popup copies reference the same tickets as history and must not double count.
+-->
+<header><a href="#synthetic-logout">로그아웃</a></header>
+<main class="my_content">
+  <div class="rsv_deposit_return-wrap history_search">
+    <div class="bg_box"><div class="inner"><p class="tit">이용내역/영수증조회</p><ul><li>조회는 승차일자 기준으로 최대 3개월까지 가능합니다.</li><li>최근 1년6개월간의 열차이용내역을 조회 할 수 있습니다.</li></ul></div></div>
+    <div class="meetingRoom_tab_wrap nonMember_ticket"><div class="meetingRoom_reservation"><div class="start_date_wrap type_comf type02">
+      <div class="choose_term"><ul class="clear"><li><button>오늘</button></li><li class="active"><button title="현재 선택된 조회 기간">1주일</button></li><li><button>1개월</button></li><li><button>3개월</button></li></ul></div>
+      <ul class="list_wrap clear">
+        <li><label for="Date01"><span>시작일</span></label><input type="text" id="Date01" readonly value="2026년 09월 11일(금)" tabindex="-1"><a href="#none" class="btn_pop btn_c-day"><span class="blind">시작일</span></a></li>
+        <li><label for="Date02"><span>종료일</span></label><input type="text" id="Date02" readonly value="2026년 09월 11일(금)" tabindex="-1"><a href="#none" class="btn_pop btn_c-day"><span class="blind">종료일</span></a></li>
+      </ul><div style="color:blue;margin-top:10px">※ 승차일자 기준으로 조회</div>
+    </div></div></div>
+    <div class="btnWrap search"><button type="button" class="btn_bn-blue">조회하기</button></div>
+    <div class="history_bottom_wrap">
+      <div class="history_top"><div class="chkecboxWrap top"><input type="checkbox" id="ck" readonly><label for="ck" class="txt">전체선택</label></div><div class="right_button btnWrap"><button type="button" class="btn_bn-blue">선택 영수증 인쇄</button></div></div>
+      <div class="history_tk"><div class="tckWrap"><ul>
+        <li class="tckList clear"><div class="tck_inner">
+          <div class="info_inner fl-l">
+            <div class="chkecboxWrap"><input type="checkbox" id="check_TEST-0911-000001-FAKE01" readonly><label for="check_TEST-0911-000001-FAKE01" class="txt"><span class="blind">KTX101 Web Ticket 발권 2026년 09월 11일 승차권 영수증</span><span>선택</span></label></div>
+            <div class="info_box"><div class="tit_box type02"><div class="flag_wrap"><span class="train_ktx"><span class="blind">KTX</span></span><span class="num">101</span><span class="dt">2026년 09월 11일(금)</span></div></div>
+              <div class="data_box right"><h3 class="txt_bk">서울 → 부산 (08:05 ~ 10:45)<span style="margin-left:6px">일반실</span></h3><div class="inline_wrap"><p>Web Ticket 발권</p><p>상태 : <span class="red">발권완료</span></p></div><p class="charge_wrap"><span class="red money">59,800원</span><span class="red charge">신용카드</span></p></div>
+            </div>
+          </div><div class="btnWrap flo-r num02"><button type="button" class="btn_by-blue">상세 조회</button></div>
+        </div></li>
+        <li class="tckList clear"><div class="tck_inner">
+          <div class="info_inner fl-l">
+            <div class="chkecboxWrap"><input type="checkbox" id="check_TEST-0911-000002-FAKE02" readonly><label for="check_TEST-0911-000002-FAKE02" class="txt"><span class="blind">KTX121 Web Ticket 발권 2026년 09월 11일 승차권 영수증</span><span>선택</span></label></div>
+            <div class="info_box"><div class="tit_box type02"><div class="flag_wrap"><span class="train_ktx"><span class="blind">KTX</span></span><span class="num">121</span><span class="dt">2026년 09월 11일(금)</span></div></div>
+              <div class="data_box right"><h3 class="txt_bk">서울 → 부산 (16:20 ~ 19:00)<span style="margin-left:6px">일반실</span></h3><div class="inline_wrap"><p>Web Ticket 발권</p><p>상태 : <span class="red">발권완료</span></p></div><p class="charge_wrap"><span class="red money">59,800원</span><span class="red charge">신용카드</span></p></div>
+            </div>
+          </div><div class="btnWrap flo-r num02"><button type="button" class="btn_by-blue">상세 조회</button><button type="button" class="btn_by-blue">현금영수증 발급</button></div>
+        </div></li>
+        <li class="tckList clear"><div class="tck_inner">
+          <div class="info_inner fl-l">
+            <div class="chkecboxWrap"><input type="checkbox" id="check_TEST-0911-000003-FAKE03" readonly><label for="check_TEST-0911-000003-FAKE03" class="txt"><span class="blind">KTX131 Web Ticket 발권 2026년 09월 11일 승차권 영수증</span><span>선택</span></label></div>
+            <div class="info_box"><div class="tit_box type02"><div class="flag_wrap"><span class="train_ktx"><span class="blind">KTX</span></span><span class="num">131</span><span class="dt">2026년 09월 11일(금)</span></div></div>
+              <div class="data_box right"><h3 class="txt_bk">서울 → 부산 (18:05 ~ 20:45)<span style="margin-left:6px">일반실</span></h3><div class="inline_wrap"><p>Web Ticket 발권</p><p>상태 : <span class="red">반환완료</span></p></div><p class="charge_wrap"><span class="red money">59,800원</span><span class="red charge">신용카드</span></p></div>
+            </div>
+          </div><div class="btnWrap flo-r num02"><button type="button" class="btn_by-blue">상세 조회</button></div>
+        </div></li>
+        <li class="tckList clear"><div class="tck_inner">
+          <div class="info_inner fl-l">
+            <div class="chkecboxWrap"><input type="checkbox" id="check_TEST-0912-000004-FAKE04" readonly><label for="check_TEST-0912-000004-FAKE04" class="txt"><span class="blind">KTX101 Web Ticket 발권 2026년 09월 12일 승차권 영수증</span><span>선택</span></label></div>
+            <div class="info_box"><div class="tit_box type02"><div class="flag_wrap"><span class="train_ktx"><span class="blind">KTX</span></span><span class="num">101</span><span class="dt">2026년 09월 12일(토)</span></div></div>
+              <div class="data_box right"><h3 class="txt_bk">서울 → 부산 (08:05 ~ 10:45)<span style="margin-left:6px">일반실</span></h3><div class="inline_wrap"><p>Web Ticket 발권</p><p>상태 : <span class="red">발권완료</span></p></div><p class="charge_wrap"><span class="red money">59,800원</span><span class="red charge">신용카드</span></p></div>
+            </div>
+          </div><div class="btnWrap flo-r num02"><button type="button" class="btn_by-blue">상세 조회</button></div>
+        </div></li>
+      </ul></div><a href="#none" class="page_group"><span>더보기</span></a></div>
+    </div>
+  </div>
+</main>
+<div class="layerWrap receipt_popup_wrap layerWrap_wide">
+  <div class="tit_wrap fl_wrap clear"><h1 class="tit">영수증 인쇄</h1><button type="button" class="btn_close"><span class="blind">창닫기</span></button></div>
+  <div class="con_Wrap"><div class="receipt_popup"><ul class="receipt_print clear type02 colm2">
+    <li><div class="receipt_bg_wrap"><div class="receipt_bg_wrap02">
+      <div class="logo_imgWrap"><h4>영수증(고객용)</h4><img alt="코레일 로고"></div>
+      <div class="receipt_top reserve_num"><div><p>NO</p><span>TEST-0911-000001-FAKE01</span></div></div>
+      <div class="text_wrap"><p><span>2026년 09월 11일(금)</span><span>KTX 101</span><span>일반실</span></p><p>서울 08:05 → 부산 10:45</p><p><span>어른 1매, 어린이 0매</span>할인 : 0</p><p>비고 : 합성 테스트</p></div>
+      <div class="receipt_middle border_none"><div class="clear"><p>신용카드 결제</p><span>****-****-****-0000 일시불</span></div><div class="clear"><p>승인일시</p><span>20260908153000</span></div><div class="clear"><p>승인번호</p><span>TESTAUTH01</span></div><div class="clear"><p>결제금액</p><span class="refund">59,800원</span></div></div>
+    </div></div></li>
+    <li><div class="receipt_bg_wrap"><div class="receipt_bg_wrap02">
+      <div class="logo_imgWrap"><h4>반환 영수증(고객용)</h4><img alt="코레일 로고"></div>
+      <div class="receipt_top reserve_num"><div><p>NO</p><span>TEST-0911-000003-FAKE03</span></div></div>
+      <div class="text_wrap"><p><span>2026년 09월 11일(금)</span><span>KTX 131</span><span>일반실</span></p><p>서울 18:05 → 부산 20:45</p><p><span>어른 1매, 어린이 0매</span>할인 : 0</p><p>비고 : 합성 반환 테스트</p></div>
+      <div class="receipt_middle border_none"><div class="clear"><p>영수금액</p><span>59,400원</span></div><div class="clear"><p>반환수수료</p><span>400원</span></div><div class="clear"><p>신용카드 반환금액</p><span>59,400원</span></div><div class="clear"><p>신용카드 결제</p><span>****-****-****-0000 일시불</span></div><div class="clear"><p>승인일시</p><span>20260910130000</span></div><div class="clear"><p>승인번호</p><span>TESTAUTH03</span></div><div class="clear"><p>결제금액</p><span class="refund">59,800원</span></div></div>
+    </div></div></li>
+  </ul><p class="bottom_text pd">* 본 영수증은 세금계산서로 사용하실 수 없으며, 고속철도는 부가가치세가 포함되어 있습니다.</p><div class="btnWrap clear"><button type="button" class="btn_bn-blue full-btn m">확인</button></div></div>
+  <div id="biz-print-receipt-btn-box"><button type="button" class="btn_bn-blue full-btn pc">인쇄하기</button></div></div>
+</div>
+<!-- Inert template: append its content to body to simulate the observed loader. -->
+<template id="fixture-only-loading-template"><div id="loadingbar" class="layerPopup"><div class="loading_spinner"><img src="/public/loading.gif" alt=""></div></div></template>
+<!-- No fabricated empty-state marker: actual member UI renders no history
+     section on empty results. Use an observed successful history response. -->
+</body></html>

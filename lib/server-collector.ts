@@ -2,7 +2,7 @@ import { env } from 'cloudflare:workers';
 import { signCollector } from './collector-security';
 import { HttpError } from './server';
 
-export type ConnectionStatus={providerId:string;connected:boolean;state:string;note:string;count:number;pending:number;requestedDates:string[];loginUrl?:string;consentedAt?:string;error?:string};
+export type ConnectionStatus={providerId:string;connected:boolean;state:string;note:string;count:number;pending:number;requestedDates:string[];completedDates?:string[];inspection?:unknown;loginUrl?:string;consentedAt?:string;error?:string};
 export type CollectionStatus={configured:boolean;connections:ConnectionStatus[];captures:{captureId:string;providerId:string;packet:unknown}[]};
 function configuration(){const url=Reflect.get(env,'CHULJANG_COLLECTOR_URL') as string|undefined;const secret=Reflect.get(env,'CHULJANG_COLLECTOR_SECRET') as string|undefined;return {url,secret};}
 export function collectorConfigured(){const {url,secret}=configuration();return !!url&&!!secret;}
