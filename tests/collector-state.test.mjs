@@ -55,6 +55,7 @@ function memoryStorage() {
       async delete(keys) { operation('delete', keys); for (const key of Array.isArray(keys) ? keys : [keys]) data.delete(key); },
       async list() { operation('list'); return copy(data); },
       async setAlarm(value) { operation('setAlarm'); alarmState.value = value; },
+      async getAlarm() { return alarmState.value; },
       async deleteAlarm() { operation('deleteAlarm'); alarmState.value = null; },
     };
   }
@@ -64,6 +65,7 @@ function memoryStorage() {
     async delete(keys) { await tail; for (const key of Array.isArray(keys) ? keys : [keys]) committed.delete(key); },
     async list() { await tail; return copy(committed); },
     async setAlarm(value) { await tail; alarm = value; },
+    async getAlarm() { await tail; return alarm; },
     async deleteAlarm() { await tail; alarm = null; },
     transaction(fn) {
       const result = tail.then(async () => {
@@ -90,6 +92,32 @@ function harness(id = 'owner-alice:korail', implementation = compile()) {
   const connection = new implementation.ReceiptConnection({ storage: memory.storage, id: { toString: () => id } }, { COLLECTOR_SECRET: secret });
   return { ...memory, connection };
 }
+
+test('polling repairs a stranded active job without moving an existing alarm or changing the login session',async()=>{
+ const h=harness();await h.connection.start('korail',days,true,crypto.randomUUID(),0);
+ const before=await h.connection.getMeta();await h.storage.deleteAlarm();
+ await h.connection.status();const repaired=h.alarm();assert.ok(repaired>Date.now());
+ await h.connection.status();assert.equal(h.alarm(),repaired);assert.deepEqual(await h.connection.getMeta(),before);
+ const lease=Date.now()+60000;await h.storage.put('meta',{...before,state:'login',sessionId:'preserved-session',leaseUntil:lease});await h.storage.deleteAlarm();
+ await h.connection.status();assert.equal(h.alarm(),lease+1000);assert.equal((await h.connection.getMeta()).sessionId,'preserved-session');
+ await h.storage.put('meta',{...before,state:'complete'});await h.storage.deleteAlarm();await h.connection.status();assert.equal(h.alarm(),null);
+});
+
+test('a hung browser shutdown cannot keep the next retry queued forever',async()=>{
+ let closing=false,disconnected=false;
+ const page={setDefaultTimeout(){},async goto(){throw new Error('TimeoutError: synthetic navigation');}};
+ const browser={contexts:()=>[{pages:()=>[page]}],async newBrowserCDPSession(){return {send(){closing=true;return new Promise(()=>{});}};},async close(){disconnected=true;}};
+ const implementation=compile({acquire:async()=>({sessionId:'synthetic-session'}),connect:async()=>browser,endpointURLString:()=> 'https://browser.invalid/',setTimeout:(fn,ms)=>setTimeout(fn,Math.min(ms,10))});
+ const h=harness('synthetic-owner',implementation);await h.connection.start('korail',days,true,crypto.randomUUID(),0);await h.connection.alarm();
+ assert.equal(closing,true);assert.equal(disconnected,true);assert.equal((await h.connection.getMeta()).state,'queued');assert.equal((await h.connection.getMeta()).retry,1);assert.ok(h.alarm());
+});
+
+test('a resource arriving after its deadline is cleaned up and never returned to the old run',async()=>{
+ const h=harness();const deferred=[];h.connection.ctx.waitUntil=promise=>deferred.push(promise);
+ let deliver,cleaned;const resource=new Promise(resolve=>{deliver=resolve;});
+ await assert.rejects(h.connection.bounded(resource,5,'test resource',async value=>{cleaned=value;}),/TimeoutError/);
+ deliver('late-resource');await new Promise(resolve=>setTimeout(resolve,0));await Promise.all(deferred);assert.equal(cleaned,'late-resource');
+});
 function packet(block = '승차일 2026.09.09\n결제금액 59,800원') {
   return { version: 3, automatic: true, source: 'ktx', requestedDates: days, blocks: [block], sourceUrl: 'https://www.korail.com/ticket/mypage/ticketInfo/receipt' };
 }
