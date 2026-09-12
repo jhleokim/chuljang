@@ -1,9 +1,10 @@
 import type { Source } from './receipts';
 export const providers:{id:Source;name:string;mode:string;color:string;url:string;steps:string[];note:string}[]=[
-{id:'ktx',name:'KTX · 코레일',mode:'영수증 발급 안내',color:'#144faf',url:'https://www.korail.com/',steps:['코레일 공식 사이트의 이용내역·영수증 조회를 여세요.','코레일톡에서 받은 이메일·PDF 영수증도 사용할 수 있어요.','발급받은 영수증 파일을 가져오면 날짜와 금액을 인식합니다.'],note:'웹에서 연결 권한을 승인하고 코레일에 로그인하면 서버가 조회합니다. 전체 회원 내역은 검증 중입니다.'},
+{id:'transit',name:'티머니 · 지하철·시내버스',mode:'회원 조회 연동 준비 중',color:'#c76221',url:'https://pay.tmoney.co.kr/ncs/pct/mtmn/ReadTrprInqr.dev',steps:['티머니 계정에 등록된 선불·모바일 교통카드가 대상입니다.','공식 조회 기간은 조회일 기준 367일 전부터 2일 전까지입니다.','신용·체크카드의 후불교통 내역은 발행 카드사에서 제공됩니다.'],note:'로그인 연결 후 회원 조회 화면을 확인하는 단계이며, 자동 수집은 아직 완성되지 않았습니다. KOBUS 고속버스와 별도 서비스입니다.'},
+{id:'ktx',name:'KTX · 코레일',mode:'날짜별 자동 조회',color:'#144faf',url:'https://www.korail.com/',steps:['출장 다녀온 날짜를 여러 개 선택하세요.','코레일 로그인 창에서 로그인과 필요한 인증을 마치세요.','로그인이 확인되면 날짜별 내역 조회와 영수증 PDF 저장으로 자동 이어집니다.'],note:'공식 조회 화면에 맞춘 전용 수집 기능을 합성 테스트로 검증했습니다. 실제 회원 계정의 로그인부터 저장까지는 아직 통합 검증하지 않았습니다.'},
 {id:'kakaot',name:'카카오 T',mode:'앱 거래확인증',color:'#473a15',url:'https://service.kakaomobility.com/cs/faqs/content/?category=16',steps:['카카오 T 앱에서 내 정보 → 이용기록을 여세요.','이용 건의 거래확인증 → 발급하기를 선택하세요.','저장·공유한 이미지나 PDF를 여기로 가져오세요.'],note:'개인 이용내역의 웹 자동연동은 제공하지 않습니다. 기사님께 직접 결제한 내역은 앱에서 발급되지 않을 수 있습니다.'},
-{id:'tmoney',name:'티머니 · 고속버스',mode:'영수증 발급 안내',color:'#ba3060',url:'https://www.kobus.co.kr/mrs/mrsrecplist.do',steps:['KOBUS 영수증 발행에서 예매·승차일과 결제 정보를 입력하세요.','발급받은 영수증 파일을 여기로 가져오세요.','시외버스는 티머니 시외버스 홈페이지의 영수증 발행을 이용하세요.'],note:'KOBUS 서버 연결을 사용할 수 있습니다. 별도 결제 정보가 필요한 조회는 공식 화면에서 확인해 주세요.'},
-{id:'airline',name:'항공',mode:'영수증 발급 안내',color:'#387767',url:'https://www.koreanair.com/',steps:['구매한 항공사 또는 여행사의 예약 상세를 여세요.','e-티켓·결제 영수증을 PDF로 저장하세요.','PDF를 가져오면 날짜와 금액을 인식합니다.'],note:'대한항공·아시아나 서버 연결을 제공합니다. 다른 항공사와 외화 내역은 별도 확인이 필요합니다.'},
+{id:'tmoney',name:'고속버스 · KOBUS',mode:'회원 조회 연동 준비 중',color:'#ba3060',url:'https://www.kobus.co.kr/mbrs/trprinqr/pymPtInqr.do',steps:['출장 날짜를 선택하고 KOBUS에 로그인할 수 있습니다.','현재는 회원 조회 화면을 확인하는 단계이며 자동 수집을 검증 중입니다.','이미 발급받은 영수증 이미지나 PDF는 가져올 수 있습니다.'],note:'로그인 연결과 영수증 자동 수집은 별개입니다. KOBUS 전용 조회 연동은 아직 완성되지 않았습니다.'},
+{id:'airline',name:'항공',mode:'발급 파일 가져오기',color:'#387767',url:'https://www.koreanair.com/',steps:['구매한 항공사 또는 여행사의 예약 상세를 여세요.','e-티켓·결제 영수증을 PDF로 저장하세요.','PDF를 가져오면 날짜와 금액을 인식합니다.'],note:'항공사 회원 계정의 자동 수집은 아직 검증하지 않았습니다. 발급받은 파일을 가져올 수 있으며 외화 내역은 별도 확인이 필요합니다.'},
 {id:'socar',name:'쏘카',mode:'앱 · 기업 웹',color:'#007fc7',url:'https://enterprise.socar.kr/bizweb_guide/',steps:['쏘카 앱 이용내역 → 결제내역 → 영수증 보기를 여세요.','매출전표를 이메일로 받거나 이용내역을 저장하세요.','쏘카 기업 웹의 이용내역서 PDF도 가져올 수 있어요.'],note:'개인 영수증은 앱에서 발급합니다. 기업 웹은 별도 프로필과 본인 인증이 필요합니다.'},
 ];
 

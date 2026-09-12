@@ -9,7 +9,7 @@ const endpoint='https://chuljang-collector.hanatrust.workers.dev';
 const owner='integration-'+crypto.randomUUID();
 async function call(values){const body=JSON.stringify({owner,...values}),timestamp=String(Date.now());const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-collector-time':timestamp,'x-collector-signature':await signCollector(secret,timestamp,body)},body});const data=await response.json();assert.ok(response.ok,JSON.stringify(data));return data;}
 assert.equal((await fetch(endpoint,{method:'POST',body:'{}'})).status,401);
-const initial=await call({action:'status'});assert.equal(initial.connections.length,5);assert.ok(initial.connections.every(row=>!row.connected));
+const initial=await call({action:'status'});assert.equal(initial.connections.length,6);assert.ok(initial.connections.every(row=>!row.connected));
 try{
  const started=await call({action:'start',providers:['korail'],requestedDates:['2026-09-11'],consent:true,jobId:crypto.randomUUID()});assert.equal(started.connections[0].state,'queued');
  let result;

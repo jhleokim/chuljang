@@ -5,7 +5,7 @@ import { SOURCES } from '@/collector/providers.js';
 import { normalizeDates } from '@/collector/date-scope.js';
 const idSchema=z.string().refine(value=>SOURCES.some(source=>source.id===value));
 const schema=z.discriminatedUnion('action',[
- z.object({action:z.literal('start'),providers:z.array(idSchema).min(1).max(5),requestedDates:z.array(z.string()).min(1).max(62),consent:z.boolean(),jobId:z.string().uuid()}),
+ z.object({action:z.literal('start'),providers:z.array(idSchema).min(1).max(6),requestedDates:z.array(z.string()).min(1).max(62),consent:z.boolean(),jobId:z.string().uuid()}),
  z.object({action:z.literal('stop'),providers:z.array(idSchema).min(1).max(5)}),
  z.object({action:z.literal('disconnect'),providers:z.array(idSchema).min(1).max(5)}),
  z.object({action:z.literal('ack'),provider:idSchema,captureId:z.string().uuid()}),
