@@ -32,8 +32,15 @@ export class ReceiptConnection extends DurableObject<Settings> {
   await this.ctx.storage.transaction(async tx=>{const meta=(await tx.get<Meta>('meta'))||empty();if(meta.generation!==generation)throw new Revoked();const old=(await tx.get<number>(key+':length'))||0;await tx.put(key+':length',parts.length);for(let i=0;i<parts.length;i++)await tx.put(key+':'+i,parts[i]);for(let i=parts.length;i<old;i++)await tx.delete(key+':'+i);if(captureId)await tx.put('meta',{...meta,pending:[...meta.pending,captureId]});});
  }
  private async getSecret<T>(key:string):Promise<T|undefined>{const count=await this.ctx.storage.get<number>(key+':length');if(!count)return;let value='';for(let i=0;i<count;i++)value+=await this.ctx.storage.get<string>(key+':'+i)||'';return openCollector<T>(this.env.COLLECTOR_SECRET,this.ctx.id.toString()+':'+key,value);}
+ private async ensureScheduled(){return this.ctx.storage.transaction(async tx=>{const meta=await tx.get<Meta>('meta')||empty();if(active(meta.state)&&await tx.getAlarm()===null)await tx.setAlarm(Math.max(Date.now()+1000,meta.leaseUntil+1000));return meta;});}
+ private bounded<T>(operation:Promise<T>,ms:number,label:string,onLate?:(value:T)=>Promise<void>):Promise<T>{
+  return new Promise((resolve,reject)=>{let expired=false;const timer=setTimeout(()=>{expired=true;reject(new Error('TimeoutError: '+label));},ms);
+   operation.then(value=>{clearTimeout(timer);if(expired){if(onLate)this.ctx.waitUntil(onLate(value).catch(()=>{}));}else resolve(value);},error=>{clearTimeout(timer);if(!expired)reject(error);});
+  });
+ }
+ private acquireSession(){return this.bounded(acquire(this.env.BROWSER,{keep_alive:60000,recording:false}),20000,'browser acquisition',session=>this.closeSession(session.sessionId));}
  private async deleteSecret(key:string){await this.ctx.storage.transaction(async tx=>{const count=await tx.get<number>(key+':length')||0;await tx.delete([key+':length',...Array.from({length:count},(_,i)=>key+':'+i)]);});}
- async status(){const meta=await this.getMeta();return {providerId:meta.provider,connected:meta.connected,consentedAt:meta.consentedAt,state:meta.state,note:meta.note,count:meta.count,pending:meta.pending.length,requestedDates:meta.dates,completedDates:meta.completedDates||[],inspection:meta.inspection,loginUrl:meta.state==='login'&&(meta.loginExpires||0)>Date.now()?meta.loginUrl:undefined};}
+ async status(){const meta=await this.ensureScheduled();return {providerId:meta.provider,connected:meta.connected,consentedAt:meta.consentedAt,state:meta.state,note:meta.note,count:meta.count,pending:meta.pending.length,requestedDates:meta.dates,completedDates:meta.completedDates||[],inspection:meta.inspection,loginUrl:meta.state==='login'&&(meta.loginExpires||0)>Date.now()?meta.loginUrl:undefined};}
  async start(provider:string,dates:string[],consent:boolean,jobId:string,delay:number){
   const requestedDates=normalizeDates(dates);
   const error=await this.ctx.storage.transaction(async tx=>{
@@ -57,8 +64,9 @@ export class ReceiptConnection extends DurableObject<Settings> {
  }
  async captures(skip:string[]){const meta=await this.getMeta();const rows=[];for(const id of meta.pending.filter(id=>!skip.includes(id)).slice(0,2)){const packet=await this.getSecret<Packet>('capture:'+id);if(packet)rows.push({captureId:id,packet,providerId:meta.provider});}return rows;}
  async acknowledge(id:string){await this.ctx.storage.transaction(async tx=>{const meta=await tx.get<Meta>('meta')||empty();if(!meta.pending.includes(id))return;const key='capture:'+id,count=await tx.get<number>(key+':length')||0;await tx.delete([key+':length',...Array.from({length:count},(_,i)=>key+':'+i)]);await tx.put('meta',{...meta,pending:meta.pending.filter(item=>item!==id)});});}
- private async attach(sessionId:string){const endpoint=new URL(endpointURLString('BROWSER',{sessionId}));endpoint.searchParams.set('persistent','true');for(let attempt=0;;attempt++){try{return await connect(endpoint);}catch(error){if(attempt>=2||!/50[234]|temporar|not ready|already.*connect|connect.*progress/i.test(String(error)))throw error;await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));}}}
- private async closeSession(sessionId:string){const browser=await this.attach(sessionId);try{const cdp=await browser.newBrowserCDPSession();await cdp.send('Browser.close');}finally{await browser.close().catch(()=>{});}}
+ private async attach(sessionId:string){const endpoint=new URL(endpointURLString('BROWSER',{sessionId}));endpoint.searchParams.set('persistent','true');for(let attempt=0;;attempt++){try{return await this.bounded(connect(endpoint),20000,'browser connection',browser=>this.bounded(browser.close(),5000,'late browser disconnect'));}catch(error){if(attempt>=2||!/50[234]|temporar|not ready|already.*connect|connect.*progress/i.test(String(error)))throw error;await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));}}}
+ private async terminateBrowser(browser:Browser){const cdp=await this.bounded(browser.newBrowserCDPSession(),5000,'browser shutdown channel');await this.bounded(cdp.send('Browser.close'),5000,'browser shutdown');}
+ private async closeSession(sessionId:string){const browser=await this.attach(sessionId);try{await this.terminateBrowser(browser);}finally{await this.bounded(browser.close(),5000,'browser disconnect').catch(()=>{});}}
  private async verified(page:Page,provider:Provider){if(!allowedUrl(page.url(),provider))return false;return page.evaluate(serviceLoginState,provider.id);}
  private async login(browser:Browser,context:BrowserContext,page:Page,provider:Provider,generation:number){
   const cdp=await context.newCDPSession(page);const view=await cdp.send('Cloudflare.getLiveView',{mode:'tab',expiresInMs:300000});
@@ -76,10 +84,10 @@ export class ReceiptConnection extends DurableObject<Settings> {
    const meta=await this.alive(generation),provider=providerFor(meta.provider!);
    if(meta.state==='login'&&(meta.loginExpires||0)<Date.now()){await this.patch(generation,{state:'error',loginUrl:undefined,note:'로그인 시간이 만료됐어요. 다시 연결해 주세요.'});if(meta.sessionId)await this.closeSession(meta.sessionId).catch(()=>{});return;}
    let sessionId=meta.sessionId;
-   if(!sessionId){await this.patch(generation,{state:'opening',note:'공식 사이트를 여는 중입니다.'});const session=await acquire(this.env.BROWSER,{keep_alive:60000,recording:false});sessionId=session.sessionId;ownedSession=sessionId;await this.patch(generation,{sessionId});}
+   if(!sessionId){await this.patch(generation,{state:'opening',note:'공식 사이트를 여는 중입니다.'});const session=await this.acquireSession();sessionId=session.sessionId;ownedSession=sessionId;await this.patch(generation,{sessionId});}
    else ownedSession=sessionId;
    stage='attach';let replaced=false;
-   try{browser=await this.attach(sessionId);}catch(error){if(!meta.sessionId||meta.retry>=1)throw error;const replacement=await acquire(this.env.BROWSER,{keep_alive:60000,recording:false});ownedSession=replacement.sessionId;replaced=true;await this.patch(generation,{sessionId:ownedSession,retry:meta.retry+1,loginTarget:undefined,loginUrl:undefined});browser=await this.attach(ownedSession);}
+   try{browser=await this.attach(sessionId);}catch(error){if(!meta.sessionId||meta.retry>=1)throw error;const replacement=await this.acquireSession();ownedSession=replacement.sessionId;replaced=true;await this.patch(generation,{sessionId:ownedSession,retry:meta.retry+1,loginTarget:undefined,loginUrl:undefined});browser=await this.attach(ownedSession);}
    const persistent=browser.contexts()[0];if(!persistent)throw new Error('context');
    const saved=meta.state!=='login'?await this.getSecret<SavedAuth>('auth'):undefined;
    let context=saved?await browser.newContext({storageState:saved}):persistent;
@@ -113,8 +121,8 @@ export class ReceiptConnection extends DurableObject<Settings> {
     }
    }
   }finally{
-   if(terminate&&ownedSession){try{if(browser){const cdp=await browser.newBrowserCDPSession();await cdp.send('Browser.close');}else await this.closeSession(ownedSession);}catch{}const meta=await this.getMeta();if(meta.generation===generation)await this.patch(generation,{sessionId:undefined,loginUrl:undefined,leaseUntil:0});}
-   await browser?.close().catch(()=>{});
+   if(terminate&&ownedSession){try{if(browser)await this.terminateBrowser(browser);else await this.closeSession(ownedSession);}catch{}const meta=await this.getMeta();if(meta.generation===generation)await this.patch(generation,{sessionId:undefined,loginUrl:undefined,leaseUntil:0});}
+   if(browser)await this.bounded(browser.close(),5000,'browser disconnect').catch(()=>{});
   }
  }
  private async collectKorail(page:Page,context:BrowserContext,generation:number){

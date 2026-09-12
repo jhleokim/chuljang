@@ -12,22 +12,23 @@ const labels:Record<string,string>={disconnected:'로그인 전',queued:'자동 
 type Props={signedIn:boolean;upload:()=>void;requestedDates:string[];onDatesChange:(days:string[])=>void;skipCaptures:()=>string[];onCapture:(packet:unknown,id:string)=>Promise<void>};
 export function TripCollection({signedIn,requestedDates,onDatesChange,skipCaptures,onCapture}:Props){
  const [status,setStatus]=useState<CollectionStatus|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[settledDates,setSettledDates]=useState<string[]>(requestedDates);
- const latest=useRef({status,skipCaptures,onCapture});latest.current={status,skipCaptures,onCapture};
+ const [statusUpdatedAt,setStatusUpdatedAt]=useState<string|null>(null),[pollError,setPollError]=useState('');
+ const latest=useRef({status,skipCaptures,onCapture,statusUpdatedAt,pollError});latest.current={status,skipCaptures,onCapture,statusUpdatedAt,pollError};
  const windows=useRef(new Map<string,Window>()),polling=useRef(false),acting=useRef(false),requests=useRef(new Map<string,string>());
  const selectedKey=requestedDates.join(',');
  useEffect(()=>{requests.current.clear();const timer=setTimeout(()=>setSettledDates(requestedDates),1800);return()=>clearTimeout(timer);},[selectedKey]);
  useEffect(()=>{if(!signedIn)return;const controller=new AbortController();
   async function poll(){if(polling.current)return;polling.current=true;try{
-   const skip=latest.current.skipCaptures().slice(-200).join(',');const response=await fetch('/api/collection'+(skip?'?skip='+encodeURIComponent(skip):''),{signal:controller.signal});
+   const skip=latest.current.skipCaptures().slice(-200).join(',');const response=await fetch('/api/collection'+(skip?'?skip='+encodeURIComponent(skip):''),{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(15000)])});
    const value=await response.json() as CollectionStatus&{error?:string};if(!response.ok)throw new Error(value.error||'연결 상태를 불러오지 못했습니다.');
-   if(controller.signal.aborted)return;setStatus(value);
+   if(controller.signal.aborted)return;setStatus(value);setStatusUpdatedAt(new Date().toISOString());setPollError('');
    for(const item of value.connections){const popup=windows.current.get(item.providerId);if(popup&&item.connected){popup.close();windows.current.delete(item.providerId);}}
    for(const capture of value.captures||[]){if(controller.signal.aborted)break;await latest.current.onCapture(capture.packet,'server:'+capture.providerId+':'+capture.captureId);}
-  }catch(err){if(!controller.signal.aborted)setError((err as Error).message);}finally{polling.current=false;}}
+  }catch{if(!controller.signal.aborted)setPollError('연결 상태 확인이 지연되고 있습니다. 자동으로 다시 확인합니다.');}finally{polling.current=false;}}
   void poll();const timer=setInterval(()=>void poll(),3000);return()=>{controller.abort();clearInterval(timer);};
  },[signedIn]);
  async function action(body:Record<string,unknown>){
-  const response=await fetch('/api/collection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const response=await fetch('/api/collection',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(25000)});
   const value=await response.json() as Partial<CollectionStatus>&{error?:string};if(!response.ok)throw new Error(value.error||'연결 요청을 처리하지 못했습니다.');
   const failed=value.connections?.find(item=>item.error);if(failed)throw new Error(failed.error);
   if(value.connections)setStatus(current=>current?{...current,connections:current.connections.map(item=>value.connections!.find(next=>next.providerId===item.providerId)||item)}:current);
@@ -52,7 +53,7 @@ export function TripCollection({signedIn,requestedDates,onDatesChange,skipCaptur
  useEffect(()=>{
   type Tool={name:string;title:string;description:string;inputSchema:object;annotations:{readOnlyHint:boolean;untrustedContentHint:boolean};execute:(input:unknown)=>unknown};
   const context=(document as Document&{modelContext?:{registerTool:(tool:Tool,options:{signal:AbortSignal})=>void|Promise<void>}}).modelContext;if(!context?.registerTool)return;const lifecycle=new AbortController();
-  try{void Promise.resolve(context.registerTool({name:'collection_status',title:'자동 수집 진행 상태',description:'서비스 연결과 날짜별 수집 상태를 읽습니다. 로그인 링크·비밀번호·영수증 원문은 반환하지 않습니다.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute(input){if(!input||typeof input!=='object'||Object.keys(input).length)throw new Error('빈 객체를 입력하세요.');return {configured:latest.current.status?.configured||false,connections:(latest.current.status?.connections||[]).map(({loginUrl,...item})=>item)};}},{signal:lifecycle.signal})).catch(()=>{});}catch{}return()=>lifecycle.abort();
+  try{void Promise.resolve(context.registerTool({name:'collection_status',title:'자동 수집 진행 상태',description:'서비스 연결과 날짜별 수집 상태를 읽습니다. 마지막 확인 시각과 연결 오류를 포함하며 로그인 링크·비밀번호·영수증 원문은 반환하지 않습니다.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute(input){if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).length)throw new Error('빈 객체를 입력하세요.');return {configured:latest.current.status?.configured||false,statusUpdatedAt:latest.current.statusUpdatedAt,pollError:latest.current.pollError,connections:(latest.current.status?.connections||[]).map(({loginUrl,...item})=>item)};}},{signal:lifecycle.signal})).catch(()=>{});}catch{}return()=>lifecycle.abort();
  },[]);
 return <><section className="date-journey" aria-labelledby="date-heading">
     <ol className="journey-steps"><li className={signedIn?'done':''}>01 로그인</li><li className="active">02 출장 날짜 선택</li><li>03 자동 조회·저장</li></ol>
@@ -71,5 +72,5 @@ return <><section className="date-journey" aria-labelledby="date-heading">
  {item?.consentedAt&&<button className="disconnect-service" disabled={busy} onClick={()=>void action({action:'disconnect',providers:[provider.id]}).catch(err=>setError(err.message))}><Unplug size={12}/> 연결 해제</button>}</article>;})}</div>
  <p className="consent-note">서비스 로그인은 선택한 출장일 내역 조회와 로그인 상태 암호화 보관에 동의하는 과정입니다. 연결은 언제든 해제할 수 있어요.</p>
  <p className="transit-availability">티머니는 등록된 카드만 조회됩니다. 오늘·어제 내역은 아직 제공되지 않을 수 있으며, 신용·체크카드 후불교통은 카드사 내역이 필요합니다.</p>
- {error&&<p className="chrome-error" role="alert">{error}</p>}</section></>;
+ {pollError&&<p className="chrome-error" role="status">{pollError}</p>}{error&&<p className="chrome-error" role="alert">{error}</p>}</section></>;
 }
