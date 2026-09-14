@@ -10,7 +10,9 @@
 - 실제 이용일을 선택 날짜 집합과 대조. 명확한 내역은 자동 저장하고 불명확한 내역은 검토.
 - 페이지를 닫아도 서버 수집과 대기 내역 유지. 다시 방문하면 미처리 결과 전달, 저장 후 확인 응답으로 중복 방지.
 - 이미지·PDF 한국어 OCR, 날짜·금액 교정, 출장별 분류와 검토 완료 표시.
-- 사용자별 D1 저장, 비공개 R2 원본과 인증된 다운로드.
+- 사용자별 저장과 인증된 원본 다운로드. 홈서버는 SQLite·파일 볼륨을, 기존 Sites 실행은 D1·R2를 사용.
+- 회사 XLSX 양식·입력 행·열 연결·수신자 설정 저장, 선택 날짜의 XLSX와 원본 ZIP 다운로드.
+- 7일 다운로드 링크 생성·종료, Gmail 작성 화면에 수신자·제목·링크 자동 입력.
 - WebMCP list_receipts(조회), stage_receipt_text(검토 초안 준비), collection_status(수집 상태 조회).
 
 ## 수집 범위
@@ -18,12 +20,16 @@
 | 서비스 | 현재 구현 상태 |
 | --- | --- |
 | KTX·코레일 | 공식 이용내역 화면과 조회 응답에 맞춘 전용 어댑터 구현. 날짜별 조회, 더보기, 취소 제외, 건수 대조, 공식 인쇄 화면의 영수증 PDF 생성을 합성 테스트로 검증했습니다. **실제 회원 계정으로 로그인부터 저장까지의 통합 검증은 아직 하지 않았습니다.** |
-| 티머니 지하철·시내버스 | 공식 로그인과 회원 조회 화면 구조 확인까지 구현. 인증 후 조회 어댑터는 `adapter_pending` 상태이며 자동 수집 완성을 뜻하지 않습니다. |
-| KOBUS 고속버스 | 공식 로그인과 회원 조회 화면 구조 확인까지 구현. 인증 후 조회 어댑터는 `adapter_pending` 상태입니다. 티머니 지하철·시내버스와 별도 서비스입니다. |
+| 티머니 지하철·시내버스 | 홈서버 회원 조회 어댑터 구현. 화면에서 식별한 날짜·등록 카드·조회 버튼을 사용하고 카드와 페이지를 순회합니다. **실제 회원 화면과 전체 건수·금액 대조는 미검증입니다.** 인식하지 못하는 구조는 오류로 남깁니다. |
+| KOBUS 고속버스 | 홈서버 회원 조회 어댑터 구현. 결제일 기준 필터라면 화면에서 확인되는 조회 가능 기간을 검색한 뒤 실제 출발일로 걸러냅니다. **실제 회원 화면과 전체 건수·금액 대조는 미검증입니다.** 기간·왕복 금액 등이 불명확하면 완료 처리하지 않습니다. |
 
 티머니 일반 조회는 회원 계정에 등록된 선불·모바일 티머니카드가 대상이며, 공식 제공 기간은 조회일 기준 D−367일부터 D−2일까지입니다. 오늘·어제 내역은 아직 제공되지 않습니다. 은행·카드사 발행 신용·체크카드의 후불교통 내역은 발행 카드사에서 받아야 합니다. 가입 전 내역은 증빙과 본인인증이 필요한 별도 신청 대상입니다. [티머니 공식 FAQ](https://pay.tmoney.co.kr/ncs/pct/cuscent/ReadFaqBscList.dev)
 
-항공·개인 카카오 T·쏘카는 발급받은 이미지/PDF를 가져올 수 있습니다. 항공·쏘카 기업 웹의 기존 실험 연결은 자동 수집을 검증한 서비스로 안내하지 않습니다. **지정 정산 양식의 파일 저장과 웹메일 첨부·전송은 아직 사용할 수 없습니다.**
+티머니·KOBUS의 생성 PDF는 조회 내역 사본이며 사업자가 발급한 공식 영수증을 대체한다고 보장하지 않습니다. 두 서비스의 새 조회 어댑터는 홈서버 실행에 적용되며 기존 Cloudflare 수집기의 구현 상태는 별도입니다.
+
+항공·개인 카카오 T·쏘카는 발급받은 이미지/PDF를 가져올 수 있습니다. 항공·쏘카 기업 웹의 기존 실험 연결은 자동 수집을 검증한 서비스로 안내하지 않습니다.
+
+정산 양식은 XLSX를 지원합니다. 설정한 입력 범위 밖의 셀·병합·수식을 유지하고, 입력 범위의 수식은 덮어쓰지 않습니다. 기존 사용자 수식은 Excel에서 열 때 재계산됩니다. HWP·DOCX·XLSM은 지원하지 않습니다. 웹메일 공유는 다운로드 링크를 작성 화면에 채우는 방식이며, 사용자가 메일 발송을 완료합니다. 바이너리 파일 자동 첨부나 자동 발송 기능은 아닙니다.
 
 허용한 공식 호스트에서 조회·영수증 인쇄 동작을 사용합니다. KTX는 응답과 표시 내역이 일치하고 선택 날짜의 모든 페이지를 확인한 경우에만 해당 날짜를 완료로 처리합니다. 로그인과 추가 인증은 사용자가 공식 화면에서 완료하며, Chrome 프로필 로그인은 서비스별 인증을 대신하지 않습니다.
 
@@ -31,11 +37,13 @@
 
 ## 실행
 
+운영 홈서버는 [Proxmox 홈서버 실행](selfhost/README.md)을 따릅니다. Node 24와 Docker를 사용하며 Cloudflare 계정과 사용자 확장 프로그램은 필요하지 않습니다. 아래는 기존 Sites 개발 환경입니다.
+
 Node.js 22.13+와 npm이 필요합니다.
 
 1. npm run install:ci
 2. npm run build
-3. 새 로컬 DB 최초 마이그레이션: node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_fluffy_fallen_one.sql
+3. 로컬 DB에 `drizzle/`의 SQL 마이그레이션을 파일 번호 순서대로 적용합니다. 실행 명령: `node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file <SQL 파일 경로>`.
 4. 수집 서버를 사용하려면 [서버 설정](docs/zero-install-collection.md)에 따라 .dev.vars를 구성합니다.
 5. npm run dev
 
@@ -46,11 +54,13 @@ Node.js 22.13+와 npm이 필요합니다.
 - node --experimental-strip-types --test tests/*.test.mjs
 - node node_modules/typescript/bin/tsc --noEmit
 - node tests/api-smoke.mjs — 로컬 5173 서버와 D1에 합성 데이터 생성.
+- npm run home:build — 홈서버 운영 빌드.
+- node tests/home-production-smoke.mjs — 실제 Next.js와 임시 SQLite에서 설정·양식·공유 다운로드·접근 제어 검증.
 
-server-collector/는 설치 없는 서버 수집 구현입니다. KTX 전용 어댑터의 합성 검증은 tests/transit-collection.test.mjs에 있습니다. collector/의 날짜·화면 읽기 모듈을 공유하며, 기존 Chrome 확장 실험 코드는 호환 목적으로 보존했습니다. 제품 사용에 확장 도구는 필요하지 않습니다.
+server-collector/는 설치 없는 서버 수집 구현입니다. KTX 전용 어댑터의 합성 검증은 tests/transit-collection.test.mjs, 티머니·KOBUS의 날짜·금액·페이지 검증은 tests/member-history.test.mjs, 양식·공유 검증은 tests/report.test.mjs에 있습니다. collector/의 날짜·화면 읽기 모듈을 공유하며, 기존 Chrome 확장 실험 코드는 호환 목적으로 보존했습니다. 제품 사용에 확장 도구는 필요하지 않습니다.
 
 ## 데이터·라이선스
 
-GitHub에는 코드와 인식 엔진만 포함합니다. 사용자 영수증·로그인 정보·운영 DB·비밀키는 저장소에 넣지 않습니다. 자동 수집 PDF와 사용자가 가져온 원본은 영수증 저장 시 비공개 R2에 보관합니다.
+GitHub에는 코드와 인식 엔진만 포함합니다. 사용자 영수증·로그인 정보·운영 DB·비밀키는 저장소에 넣지 않습니다. 자동 수집 PDF와 사용자가 가져온 원본은 영수증 저장 시 홈서버 비공개 파일 볼륨 또는 Sites의 비공개 R2에 보관합니다. 공유 링크를 만든 정산 파일만 해당 링크로 기한 내 다운로드할 수 있습니다.
 
 OCR 자산은 기존 jacha 프로젝트 자산을 재사용했습니다. Tesseract 라이선스·NOTICE는 public/vendor/ocr, PDF.js 라이선스는 public/vendor/LICENSE-pdfjs에 있습니다.
