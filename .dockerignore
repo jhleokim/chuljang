@@ -1,0 +1,14 @@
+.git
+node_modules
+.next
+.wrangler
+.vinext
+.sites-runtime
+dist
+.dev.vars*
+.env*
+selfhost/.env
+selfhost/admin-password.txt
+selfhost-data
+chuljang-artifacts
+*.tsbuildinfo

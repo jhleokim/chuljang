@@ -1,0 +1,8 @@
+# Replace with the existing home-server domain; forward only 80/443 to this VM.
+receipts.example.com {
+    encode zstd gzip
+    request_body {
+        max_size 15MB
+    }
+    reverse_proxy 127.0.0.1:3080
+}

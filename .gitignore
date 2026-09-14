@@ -50,3 +50,6 @@ next-env.d.ts
 *.tsbuildinfo
 
 /chuljang-artifacts/
+/selfhost-data/
+/selfhost/.env
+/selfhost/admin-password.txt

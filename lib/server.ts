@@ -6,8 +6,9 @@ export async function owner(request?:Request){
  const user=await getChatGPTUser();if(!user)throw new HttpError(401,'로그인 후 이용해 주세요.');
  if(request&&request.method!=='GET'){
   const origin=request.headers.get('origin');
-  const expected=new URL(request.url).origin;
-  if(origin&&origin!==expected&&origin!=='https://chuljang-receipts.jhleokim.chatgpt.site')throw new HttpError(403,'허용되지 않은 요청입니다.');
+  const homeOrigin=Reflect.get(env,'HOME_ORIGIN') as string|undefined;
+  const expected=homeOrigin||new URL(request.url).origin;
+  if(origin&&origin!==expected&&(homeOrigin||origin!=='https://chuljang-receipts.jhleokim.chatgpt.site'))throw new HttpError(403,'허용되지 않은 요청입니다.');
  }
  return user.userId;
 }
