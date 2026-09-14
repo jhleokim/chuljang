@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { readFile, writeFile, rename, unlink } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -13,6 +13,12 @@ export class HomeStorage {
     this.sql.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
     if (!this.sql.prepare("SELECT 1 FROM sqlite_master WHERE name='receipts'").get()) {
       this.sql.exec(readFileSync(resolve('drizzle/0000_fluffy_fallen_one.sql'), 'utf8'));
+    }
+    this.sql.exec('CREATE TABLE IF NOT EXISTS home_schema_migrations (name TEXT PRIMARY KEY)');
+    this.sql.prepare('INSERT OR IGNORE INTO home_schema_migrations VALUES (?)').run('0000_fluffy_fallen_one.sql');
+    for(const name of readdirSync(resolve('drizzle')).filter(name=>/^\d+_.+\.sql$/.test(name)).sort()){
+      if(this.sql.prepare('SELECT 1 FROM home_schema_migrations WHERE name=?').get(name))continue;
+      this.transaction(()=>{this.sql.exec(readFileSync(resolve('drizzle',name),'utf8'));this.sql.prepare('INSERT INTO home_schema_migrations VALUES (?)').run(name);});
     }
     this.sql.exec(`CREATE TABLE IF NOT EXISTS home_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS home_sessions (token TEXT PRIMARY KEY, expires INTEGER NOT NULL);

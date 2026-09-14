@@ -9,11 +9,11 @@ import {SOURCES} from '@/collector/providers.js';
 import {collectionPlan,primaryServices} from '@/lib/collection-plan';
 import type {CollectionStatus} from '@/lib/server-collector';
 const labels:Record<string,string>={disconnected:'로그인 전',queued:'자동 조회 대기',opening:'로그인 준비 중',login:'로그인해 주세요',collecting:'자동 수집 중',complete:'선택 날짜 조회 완료',partial:'일부 수집',adapter_pending:'회원 조회 연동 검증 필요',error:'자동 조회 실패',stopped:'날짜 변경 반영 중'};
-type Props={signedIn:boolean;upload:()=>void;requestedDates:string[];onDatesChange:(days:string[])=>void;skipCaptures:()=>string[];onCapture:(packet:unknown,id:string)=>Promise<void>};
-export function TripCollection({signedIn,requestedDates,onDatesChange,skipCaptures,onCapture}:Props){
+type Props={signedIn:boolean;upload:()=>void;requestedDates:string[];onDatesChange:(days:string[])=>void;skipCaptures:()=>string[];onCapture:(packet:unknown,id:string)=>Promise<void>;onProgress?:(working:boolean)=>void};
+export function TripCollection({signedIn,requestedDates,onDatesChange,skipCaptures,onCapture,onProgress}:Props){
  const [status,setStatus]=useState<CollectionStatus|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[settledDates,setSettledDates]=useState<string[]>(requestedDates);
  const [statusUpdatedAt,setStatusUpdatedAt]=useState<string|null>(null),[pollError,setPollError]=useState('');
- const latest=useRef({status,skipCaptures,onCapture,statusUpdatedAt,pollError});latest.current={status,skipCaptures,onCapture,statusUpdatedAt,pollError};
+ const latest=useRef({status,skipCaptures,onCapture,statusUpdatedAt,pollError,onProgress});latest.current={status,skipCaptures,onCapture,statusUpdatedAt,pollError,onProgress};
  const windows=useRef(new Map<string,Window>()),polling=useRef(false),acting=useRef(false),requests=useRef(new Map<string,string>());
  const selectedKey=requestedDates.join(',');
  useEffect(()=>{requests.current.clear();const timer=setTimeout(()=>setSettledDates(requestedDates),1800);return()=>clearTimeout(timer);},[selectedKey]);
@@ -22,6 +22,7 @@ export function TripCollection({signedIn,requestedDates,onDatesChange,skipCaptur
    const skip=latest.current.skipCaptures().slice(-200).join(',');const response=await fetch('/api/collection'+(skip?'?skip='+encodeURIComponent(skip):''),{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(15000)])});
    const value=await response.json() as CollectionStatus&{error?:string};if(!response.ok)throw new Error(value.error||'연결 상태를 불러오지 못했습니다.');
    if(controller.signal.aborted)return;setStatus(value);setStatusUpdatedAt(new Date().toISOString());setPollError('');
+   latest.current.onProgress?.(value.connections.some(item=>['queued','opening','login','collecting'].includes(item.state)||item.pending>0));
    for(const item of value.connections){const popup=windows.current.get(item.providerId);if(popup&&item.connected){popup.close();windows.current.delete(item.providerId);}}
    for(const capture of value.captures||[]){if(controller.signal.aborted)break;await latest.current.onCapture(capture.packet,'server:'+capture.providerId+':'+capture.captureId);}
   }catch{if(!controller.signal.aborted)setPollError('연결 상태 확인이 지연되고 있습니다. 자동으로 다시 확인합니다.');}finally{polling.current=false;}}

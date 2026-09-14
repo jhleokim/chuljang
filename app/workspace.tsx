@@ -17,6 +17,7 @@ import { readReceiptFile } from '@/lib/read-file';
 import { draftErrors, type Draft } from '@/lib/draft-review';
 import { ReceiptOriginal, ReceiptReview } from '@/components/receipt-review';
 import { TripCollection } from '@/components/chrome-collection';
+import { ReportExport } from '@/components/report-export';
 import { automaticImportBody, prepareAutomaticImport } from '@/lib/auto-import';
 import { normalizeDates } from '../collector/date-scope.js';
 import { attachmentFile,type ReceiptAttachment } from '@/lib/receipt-attachment';
@@ -37,6 +38,7 @@ function packetValue(value:unknown):Packet{
 }
 export default function Workspace({signedIn}:{signedIn:boolean}) {
  const [requestedDates,setRequestedDates]=useState<string[]>([]);
+ const [collecting,setCollecting]=useState(false);
  useEffect(()=>{try{const saved=sessionStorage.getItem('chuljang-dates');if(saved)setRequestedDates(normalizeDates(JSON.parse(saved)));}catch{}},[]);
  function chooseDates(days:string[]){setRequestedDates(days);try{sessionStorage.setItem('chuljang-dates',JSON.stringify(days));}catch{}}
  const [receipts,setReceipts]=useState<Receipt[]>([]),[trips,setTrips]=useState<Trip[]>([]);
@@ -187,8 +189,8 @@ export default function Workspace({signedIn}:{signedIn:boolean}) {
   {!signedIn&&<div className="notice">가져온 영수증을 내 공간에 보관할 수 있도록 먼저 <a href="/signin-with-chatgpt?return_to=/" target="_top">로그인해 주세요.</a></div>}
   {loadError&&<div className="notice error" role="alert"><span>{loadError}</span><Button variant="outline" size="sm" onClick={()=>void refresh()}>다시 불러오기</Button></div>}
   {(drafts.length>0||text.trim())&&<div className="resume-banner"><div><FileText size={21}/><span><strong>{drafts.length?drafts.length+'건 검토 중':'작성 중인 영수증이 있어요'}</strong><small>서버 수집 내역은 보관됩니다 · 직접 올린 초안은 저장해 주세요</small></span></div><Button variant="outline" onClick={()=>openCollect()}>이어서 검토 <ArrowUpRight size={16}/></Button></div>}
-  <TripCollection signedIn={signedIn} upload={()=>openCollect()} requestedDates={requestedDates} onDatesChange={chooseDates} skipCaptures={()=>[...new Set([...receivedCaptures.current,...resolvedCaptures.current])].filter(id=>id.startsWith('server:')).map(id=>id.split(':')[2])} onCapture={async(packet,id)=>{await receiveCapture(packetValue(packet),id);}}/>
-  <section className="report-next"><FileText size={23}/><div><span>03 · 지정 양식으로 저장·공유</span><h2>사용할 정산 양식을 기다리고 있어요.</h2><p>양식이 지정된 뒤 파일 저장과 웹메일 공유를 연결합니다. 현재는 영수증 수집·보관까지 사용할 수 있어요.</p></div><span className="report-pending">양식 미지정</span></section>
+  <TripCollection signedIn={signedIn} upload={()=>openCollect()} requestedDates={requestedDates} onDatesChange={chooseDates} onProgress={setCollecting} skipCaptures={()=>[...new Set([...receivedCaptures.current,...resolvedCaptures.current])].filter(id=>id.startsWith('server:')).map(id=>id.split(':')[2])} onCapture={async(packet,id)=>{await receiveCapture(packetValue(packet),id);}}/>
+  <ReportExport signedIn={signedIn} receipts={receipts} trips={trips} dates={requestedDates} collecting={collecting||busy} needsReview={drafts.length>0} />
   <div className="summary-grid"><div className="summary-card"><span>모은 영수증</span><strong>{loading?<Skeleton className="h-9 w-20"/>:format(receipts.length)}<small>건</small></strong><FileText/></div><div className="summary-card"><span>총 지출 · KRW</span><strong>{loading?<Skeleton className="h-9 w-28"/>:format(total)}<small>원</small></strong><Wallet/></div><button className="summary-card review-summary" onClick={()=>{setStatusFilter('review');document.getElementById('receipt-ledger')?.scrollIntoView({behavior:'smooth',block:'start'});}}><span>검토할 내역 <ArrowUpRight size={13}/></span><strong>{loading?<Skeleton className="h-9 w-20"/>:format(review)}<small>건</small></strong><CreditCard/></button></div>
 
   <section className="source-grid" aria-label="수집 서비스">{providers.map(p=>{const Icon=icons[p.id];const count=receipts.filter(r=>r.source===p.id).length;return <button key={p.id} className="source-card" onClick={()=>openCollect(p.id,p.id==='kakaot'||p.id==='socar'?'file':'web')}><div className="source-top"><Icon size={23} style={{color:p.color}}/><span>{p.mode}</span></div><strong>{p.name}</strong><p>{count?count+'건 보관 중':'수집 방법 보기'} <ArrowUpRight size={14}/></p></button>;})}</section>

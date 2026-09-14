@@ -6,10 +6,11 @@ import { sealCollector, openCollector } from '../lib/collector-security.ts';
 import { serviceLoginState } from '../server-collector/history-dom.ts';
 import { inspectMemberControls } from '../server-collector/member-inspection.ts';
 import { collectKorailDay, korailDayUrl } from '../server-collector/korail.ts';
+import {collectMemberDay,MemberHistoryError,transitAvailability} from '../server-collector/member-history.ts';
 import { HomeStorage } from './storage.mjs';
 import { openBrowser } from './browser.mjs';
 
-type Meta={providerId:string;state:string;connected:boolean;note:string;count:number;pending:string[];requestedDates:string[];completedDates:string[];generation:number;consentedAt?:string;jobId?:string;inspection?:unknown;loginUrl?:string};
+type Meta={providerId:string;state:string;connected:boolean;note:string;count:number;pending:string[];requestedDates:string[];completedDates:string[];generation:number;consentedAt?:string;jobId?:string;inspection?:unknown;loginUrl?:string;unavailableDates?:{date:string;reason:string}[]};
 type Session={owner:string;provider:string;generation:number;port:number;close:()=>Promise<void>};
 const active=(state:string)=>['queued','opening','login','collecting'].includes(state);
 const input=z.object({action:z.enum(['status','start','stop','disconnect','ack']),providers:z.array(z.string()).min(1).max(6).optional(),requestedDates:z.array(z.string()).min(1).max(62).optional(),consent:z.boolean().optional(),jobId:z.string().uuid().optional(),provider:z.string().optional(),captureId:z.string().uuid().optional(),skip:z.array(z.string().uuid()).max(200).optional()});
@@ -36,7 +37,7 @@ export class HomeCollector {
   private patch(provider:string,generation:number,values:Partial<Meta>){const meta=this.alive(provider,generation);this.save({...meta,...values});}
   private async putSecret(provider:string,suffix:string,value:unknown,generation:number){const key=this.key(provider,suffix);const sealed=await sealCollector(this.secret,key,value);this.alive(provider,generation);this.storage.set(key,sealed);}
   private async getSecret<T>(provider:string,suffix:string){const key=this.key(provider,suffix),value=this.storage.get(key);return value?await openCollector<T>(this.secret,key,value):undefined;}
-  resume(){for(const source of SOURCES)this.schedule(source.id);}
+  resume(){for(const source of SOURCES){const meta=this.meta(source.id);if(source.id==='tmoneyTransit'&&meta.state==='partial'&&meta.unavailableDates?.some(item=>!transitAvailability(item.date))){this.save({...meta,state:'queued',unavailableDates:meta.unavailableDates.filter(item=>!!transitAvailability(item.date))});}this.schedule(source.id);}}
   private schedule(provider:string){
     if(this.closing||this.running.has(provider)||!active(this.meta(provider).state))return;
     const operation=this.run(provider).finally(()=>{this.running.delete(provider);if(!this.closing&&this.meta(provider).state==='queued')this.schedule(provider);});
@@ -69,7 +70,7 @@ export class HomeCollector {
         if(meta.pending.length>=100)throw new Error('Pending capture capacity exceeded');
         if(['opening','login','queued'].includes(meta.state)&&!meta.connected){this.save({...meta,requestedDates:dates,completedDates:[],jobId:data.jobId});continue;}
         this.save({...meta,generation:meta.generation+1,state:'stopped'});await this.closeProvider(id);
-        meta=this.meta(id);this.save({...meta,state:'queued',requestedDates:dates,completedDates:[],count:0,inspection:undefined,loginUrl:undefined,jobId:data.jobId,consentedAt:meta.consentedAt||new Date().toISOString(),note:'공식 사이트를 준비하고 있어요.'});this.schedule(id);
+        meta=this.meta(id);this.save({...meta,state:'queued',requestedDates:dates,completedDates:[],count:0,unavailableDates:[],inspection:undefined,loginUrl:undefined,jobId:data.jobId,consentedAt:meta.consentedAt||new Date().toISOString(),note:'공식 사이트를 준비하고 있어요.'});this.schedule(id);
       }else{
         const revoke=data.action==='disconnect';
         this.storage.transaction(()=>{
@@ -104,17 +105,18 @@ export class HomeCollector {
       this.sessions.delete(id);
       await this.putSecret(provider,'auth',await context.storageState({indexedDB:true}),generation);
       this.patch(provider,generation,{connected:true,state:'collecting',loginUrl:undefined,note:'선택한 출장 날짜를 조회하고 있어요.'});
-      if(provider!=='korail'){
+      if(!['korail','tmoneyTransit','kobus'].includes(provider)){
         this.patch(provider,generation,{state:'adapter_pending',inspection:await page.evaluate(inspectMemberControls),note:'로그인은 연결됐습니다. 회원 조회 화면에 맞춘 자동 수집 검증이 아직 필요합니다.'});return;
       }
       for(;;){
-        const meta=this.alive(provider,generation),day=meta.requestedDates.find(date=>!meta.completedDates.includes(date));
-        if(!day){this.patch(provider,generation,{state:'complete',note:'선택한 '+meta.requestedDates.length+'일 조회 완료 · '+meta.count+'건'});break;}
+        const meta=this.alive(provider,generation),day=meta.requestedDates.find(date=>!meta.completedDates.includes(date)&&!meta.unavailableDates?.some(item=>item.date===date));
+        if(!day){const deferred=meta.unavailableDates||[];this.patch(provider,generation,{state:deferred.length?'partial':'complete',note:meta.completedDates.length+'일 조회 완료 · '+meta.count+'건'+(deferred.length?' · '+deferred.length+'일 조회 불가: '+deferred[0].reason:'')});break;}
+        if(provider==='tmoneyTransit'){const reason=transitAvailability(day);if(reason){this.patch(provider,generation,{unavailableDates:[...(meta.unavailableDates||[]),{date:day,reason}]});continue;}}
         this.patch(provider,generation,{note:day+' 이용내역과 영수증을 조회하고 있어요.'});
-        const result=await this.collectDay(page as unknown as import('@cloudflare/playwright').Page,day,async()=>this.alive(provider,generation));
+        const result=provider==='korail'?await this.collectDay(page as unknown as import('@cloudflare/playwright').Page,day,async()=>this.alive(provider,generation)):await collectMemberDay(page,provider,day,async()=>this.alive(provider,generation));
         if(result.blocks.some(block=>matchTravelDate(block,[day]).kind!=='match'))throw new Error('Receipt date mismatch');
         const captureId=randomUUID();let sealed:string|undefined;
-        if(result.blocks.length){sealed=await sealCollector(this.secret,this.key(provider,'capture:'+captureId),{version:3,automatic:true,source:'ktx',requestedDates:meta.requestedDates,blocks:result.blocks,sourceUrl:korailDayUrl(day),attachment:result.attachment});}
+        if(result.blocks.length){sealed=await sealCollector(this.secret,this.key(provider,'capture:'+captureId),{version:3,automatic:true,source:source.source,requestedDates:meta.requestedDates,blocks:result.blocks,sourceUrl:provider==='korail'?korailDayUrl(day):source.startUrl,attachment:result.attachment});}
         this.storage.transaction(()=>{
           const current=this.alive(provider,generation);
           if(sealed)this.storage.set(this.key(provider,'capture:'+captureId),sealed);
@@ -125,7 +127,8 @@ export class HomeCollector {
     }catch(error){
       if(!(error instanceof Revoked)&&this.meta(provider).generation===generation&&!this.closing){
         console.error('home_collector_failed',{provider,kind:error instanceof Error?error.name:'Error'});
-        this.patch(provider,generation,{state:'error',loginUrl:undefined,note:error instanceof Error&&error.message==='Login expired'?'로그인 시간이 만료됐어요. 다시 연결해 주세요.':'서비스 연결 또는 날짜 조회를 마치지 못했습니다. 다시 연결해 주세요.'});
+        const inspection=browser?await browser.page.evaluate(inspectMemberControls).catch(()=>undefined):undefined;
+        this.patch(provider,generation,{state:'error',inspection,loginUrl:undefined,note:error instanceof MemberHistoryError?error.message:error instanceof Error&&error.message==='Login expired'?'로그인 시간이 만료됐어요. 다시 연결해 주세요.':'서비스 연결 또는 날짜 조회를 마치지 못했습니다. 다시 연결해 주세요.'});
       }
     }finally{this.sessions.delete(id);await browser?.close().catch(()=>{});}
   }

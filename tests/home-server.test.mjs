@@ -94,9 +94,9 @@ test('disconnect revokes login windows and a late browser result cannot restore 
  release({...fakeBrowser(),close:async()=>{closed++;}});await until(()=>closed);
  const status=await collector.request('owner',{action:'status'}),korail=status.connections.find(row=>row.providerId==='korail');assert.equal(korail.state,'disconnected');assert.equal(korail.connected,false);assert.equal(collector.sessions.size,0);
 });
-test('unverified transit adapters remain explicitly pending after member login',async t=>{
+test('transit adapters reject a member page without verified query controls instead of claiming empty completion',async t=>{
  const {storage}=await fixture(t),collector=new HomeCollector(storage,secret,'owner',async()=>fakeBrowser());t.after(()=>collector.close());
  await collector.request('owner',start(['tmoneyTransit','kobus']));
- const status=await until(async()=>{const data=await collector.request('owner',{action:'status'});return data.connections.filter(row=>['tmoneyTransit','kobus'].includes(row.providerId)).every(row=>row.state==='adapter_pending')&&data;});
- assert.equal(status.captures.length,0);assert.ok(status.connections.filter(row=>row.state==='adapter_pending').every(row=>row.connected));
+ const status=await until(async()=>{const data=await collector.request('owner',{action:'status'});return data.connections.filter(row=>['tmoneyTransit','kobus'].includes(row.providerId)).every(row=>row.state==='error')&&data;});
+ assert.equal(status.captures.length,0);assert.ok(status.connections.filter(row=>row.state==='error').every(row=>row.connected&&row.completedDates.length===0&&/조회/.test(row.note)));
 });

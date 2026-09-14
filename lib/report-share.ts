@@ -1,0 +1,3 @@
+export async function shareHash(token:string){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token)))).map(value=>value.toString(16).padStart(2,'0')).join('');}
+export function shareToken(){return Array.from(crypto.getRandomValues(new Uint8Array(32))).map(value=>value.toString(16).padStart(2,'0')).join('');}
+export function downloadHeaders(filename:string){return {'Content-Disposition':"attachment; filename=\"chuljang.zip\"; filename*=UTF-8''"+encodeURIComponent(filename),'Content-Type':'application/zip','Cache-Control':'private, no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff','X-Robots-Tag':'noindex, nofollow'};}

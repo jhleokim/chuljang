@@ -47,7 +47,8 @@ export function parseReceipt(raw:string,source:Source):Partial<Candidate>&{sourc
  const ref=/(?:승인번호|예약번호|승차권번호|거래번호)\s*[:：]?\s*([A-Z0-9][A-Z0-9\-]{3,50})/i.exec(text)?.[1]||'';
  const route=/(?:출발지?|승차역)\s*[:：]\s*([^\n\t]{1,25})/.exec(text)?.[1];
  const end=/(?:도착지?|하차역)\s*[:：]\s*([^\n\t]{1,25})/.exec(text)?.[1];
- return {source,date:isDate(date)?date:'',merchant:route&&end?route.trim()+' → '+end.trim():sourceNames[source],amount,reference:ref,raw:text,sourceUrl:'',issues};
+ const description=/(?:이용내역|사용처)\s*[:：]\s*([^\n\t]{1,150})/.exec(text)?.[1];
+ return {source,date:isDate(date)?date:'',merchant:route&&end?route.trim()+' → '+end.trim():description?.trim()||sourceNames[source],amount,reference:ref,raw:text,sourceUrl:'',issues};
 }
 export function csvCell(value:unknown){let s=String(value??'');if(/^[\s]*[=+@-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}
 export function exportCsv(rows:Receipt[],trips:Trip[]){
