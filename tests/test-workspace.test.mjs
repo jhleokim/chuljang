@@ -1,0 +1,24 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {HomeStorage} from '../selfhost/storage.mjs';
+import {HomeAuth,hashPassword} from '../selfhost/auth.mjs';
+import {installTestWorkspaces,createTestWorkspace,testIdentity} from '../cloud/test-workspace.mjs';
+test('passwordless test sessions separate users, resist guessed IDs and expire without exposing existing accounts',async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'chuljang-test-mode-')),storage=new HomeStorage(directory);
+ t.after(async()=>{storage.close();await rm(directory,{recursive:true,force:true});});
+ const auth=new HomeAuth(storage,'https://test.example',await hashPassword('Synthetic long password only'));
+ installTestWorkspaces(storage);
+ const now=Date.now(),a=createTestWorkspace(storage,auth,'a',now),b=createTestWorkspace(storage,auth,'b',now);
+ assert.notEqual(a.id,b.id);assert.notEqual(a.cookie,b.cookie);
+ assert.equal(testIdentity(storage,auth,a.cookie,now).id,a.id);assert.equal(testIdentity(storage,auth,b.cookie,now).id,b.id);
+ assert.equal(testIdentity(storage,auth,'chuljang_test_session='+a.id,now),null);
+ assert.equal(testIdentity(storage,auth,auth.issueSession('home-owner').cookie,now),null);
+ assert.equal(testIdentity(storage,auth,a.cookie,now+86400000),null);
+ storage.sql.prepare('UPDATE home_users SET disabled=1 WHERE id=?').run(b.id);assert.equal(testIdentity(storage,auth,b.cookie,now),null);
+ assert.equal(auth.account('home-owner').disabled,0);
+ assert.match(a.cookie,/HttpOnly; SameSite=Strict; Max-Age=86400; Secure/);
+ assert.ok(!JSON.stringify(storage.sql.prepare('SELECT * FROM test_workspaces').all()).includes(a.cookie.split('=')[1].split(';')[0]));
+});

@@ -4,6 +4,7 @@ import {handleAccount,deleteAccountData,escape} from '../selfhost/accounts.mjs';
 import {AuthStorage} from './sql-storage.mjs';
 import {fileBucket} from './file-bucket.mjs';
 import {sendCollector} from './collector-client.mjs';
+import {installTestWorkspaces,testIdentity,createTestWorkspace} from './test-workspace.mjs';
 
 function loginPage(returnTo,error='') {return `<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>출장 · 로그인</title><link rel="stylesheet" href="/home-assets/home.css"><main class="card"><span class="eyebrow">CHULJANG</span><h1>나의 출장 정산</h1><p>초대받은 개인 계정으로 로그인하세요. 운영자는 저장 데이터에 접근할 수 있습니다.</p><form method="post" action="/signin-with-chatgpt"><input type="hidden" name="return_to" value="${escape(safeReturn(returnTo))}"><label>아이디<input name="username" autocomplete="username" required autofocus maxlength="40"></label><label>비밀번호<input name="password" type="password" autocomplete="current-password" required maxlength="512"></label><p role="alert">${escape(error)}</p><button>로그인</button></form><a href="/recover">복구 코드로 비밀번호 찾기</a></main></html>`;}
 
@@ -13,6 +14,7 @@ export class AccountDirectory extends DurableObject {
   constructor(ctx,env) {
     super(ctx,env);this.storage=new AuthStorage(ctx);
     this.auth=new HomeAuth(this.storage,env.HOME_ORIGIN,env.HOME_PASSWORD_HASH,'home-owner');
+    installTestWorkspaces(this.storage);
     ctx.blockConcurrencyWhile(async()=>{await ctx.storage.setAlarm(Date.now()+60000);});
   }
   async syncAccount(id) {
@@ -21,8 +23,21 @@ export class AccountDirectory extends DurableObject {
     await this.env.DB.prepare('INSERT INTO home_users(id,username,role,disabled,created) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,role=excluded.role,disabled=excluded.disabled').bind(account.id,account.username,account.role,account.disabled,account.created).run();
     this.storage.delete('mirror-account:'+id);
   }
-  identity(cookie) {const id=this.auth.user(cookie);return id?this.auth.account(id):null;}
-  active(id) {const user=this.auth.account(id);return !!user&&!user.disabled;}
+  identity(cookie) {if(this.env.TEST_MODE==='1')return testIdentity(this.storage,this.auth,cookie);const id=this.auth.user(cookie);return id?this.auth.account(id):null;}
+  async beginTest(cookie,scope) {
+    if(this.env.TEST_MODE!=='1')throw new Error('Test mode disabled');
+    const current=this.identity(cookie);if(current)return {user:current};
+    const created=createTestWorkspace(this.storage,this.auth,scope);await this.syncAccount(created.id);
+    return {user:this.auth.account(created.id),cookie:created.cookie};
+  }
+  async endTest(cookie) {
+    const user=this.env.TEST_MODE==='1'&&this.identity(cookie);if(!user||user.role!=='test')return false;
+    this.storage.sql.prepare('UPDATE home_users SET disabled=1 WHERE id=?').run(user.id);
+    this.storage.set('account-delete:'+user.id,user.id);await this.syncAccount(user.id);await this.queueRevoke(user.id);
+    await this.deleteData(this.auth,user.id);this.storage.sql.prepare('DELETE FROM test_workspaces WHERE user_id=?').run(user.id);return true;
+  }
+  active(id) {const user=this.auth.account(id);return !!user&&!user.disabled&&(user.role!=='test'||this.retentionUntil(id)>Date.now());}
+  retentionUntil(id) {const row=this.storage.sql.prepare('SELECT expires FROM test_workspaces WHERE user_id=?').get(id);return row?.expires||0;}
   migrationStatus() {return this.storage.get('migration-complete')===true;}
   async migrate(action,payload) {
     if(action==='status')return {complete:this.migrationStatus()};
@@ -69,6 +84,11 @@ export class AccountDirectory extends DurableObject {
   }
   async alarm() {
     try {
+      for(const row of this.storage.sql.prepare('SELECT user_id FROM test_workspaces WHERE expires<=?').all(Date.now())){
+        this.storage.sql.prepare('UPDATE home_users SET disabled=1 WHERE id=?').run(row.user_id);
+        this.storage.set('account-delete:'+row.user_id,row.user_id);await this.queueRevoke(row.user_id);
+        this.storage.sql.prepare('DELETE FROM test_workspaces WHERE user_id=?').run(row.user_id);
+      }
       for(const row of this.storage.sql.prepare("SELECT value FROM home_state WHERE key LIKE 'mirror-account:%'").all())await this.syncAccount(JSON.parse(row.value));
       for(const row of this.storage.sql.prepare("SELECT value FROM home_state WHERE key LIKE 'account-delete:%'").all())await this.deleteData(this.auth,JSON.parse(row.value));
       for(const row of this.storage.sql.prepare("SELECT key,value FROM home_state WHERE key LIKE 'collector-revoke:%'").all()){

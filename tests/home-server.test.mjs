@@ -73,7 +73,7 @@ test('home HTTP rejects forged identity, cross-origin login and unauthenticated 
  assert.equal((await fetch(auth.origin+'/remote/'+'f'.repeat(48)+'/',{headers:{Cookie:cookie}})).status,410);
 });
 function fakeBrowser(verified=()=>true){
- let url='';return {port:5999,close:async()=>{},page:{url:()=>url,goto:async value=>{url=value;},evaluate:async fn=>fn.name==='serviceLoginState'?verified():{inputs:[]}},context:{storageState:async()=>({cookies:[{name:'synthetic',value:'private-session'}],origins:[]})}};
+ let url='';return {port:5999,close:async()=>{},page:{waitForFunction:async()=>{},url:()=>url,goto:async value=>{url=value;},evaluate:async fn=>fn.name==='serviceLoginState'?verified():{inputs:[]}},context:{storageState:async()=>({cookies:[{name:'synthetic',value:'private-session'}],origins:[]})}};
 }
 test('home collection checkpoints exact non-contiguous dates and stores encrypted captures across restart',async t=>{
  const {storage,directory}=await fixture(t),days=['2026-09-09','2026-09-11'],queried=[];
@@ -93,6 +93,15 @@ test('disconnect revokes login windows and a late browser result cannot restore 
  await collector.request('owner',start());await collector.request('owner',{action:'disconnect',providers:['korail']});
  release({...fakeBrowser(),close:async()=>{closed++;}});await until(()=>closed);
  const status=await collector.request('owner',{action:'status'}),korail=status.connections.find(row=>row.providerId==='korail');assert.equal(korail.state,'disconnected');assert.equal(korail.connected,false);assert.equal(collector.sessions.size,0);
+});
+
+test('test collection opens official KTX login once and never reads or persists service login state',async t=>{
+ const {storage}=await fixture(t),urls=[];let savedRead=false,stateReads=0;
+ const browser=fakeBrowser();browser.page.goto=async url=>{urls.push(url);browser.page.url=()=>url;};browser.context.storageState=async()=>{stateReads++;throw new Error('No session storage in test mode');};
+ const id='test-synthetic',collector=new HomeCollector(storage,secret,id,async(slot,saved)=>{savedRead=saved!==undefined;return browser;},async(page,day)=>({blocks:['승차일 '+day+'\n결제금액 1000원'],completed:true}));t.after(()=>collector.close());
+ await collector.request(id,start());await until(async()=>{const row=(await collector.request(id,{action:'status'})).connections.find(value=>value.providerId==='korail');return row.state==='complete'&&!row.connected;});
+ assert.deepEqual(urls,['https://www.korail.com/ticket/login']);assert.equal(savedRead,false);assert.equal(stateReads,0);
+ assert.equal(storage.get(JSON.stringify(['collector',id,'korail','auth'])),undefined);
 });
 test('transit adapters reject a member page without verified query controls instead of claiming empty completion',async t=>{
  const {storage}=await fixture(t),collector=new HomeCollector(storage,secret,'owner',async()=>fakeBrowser());t.after(()=>collector.close());

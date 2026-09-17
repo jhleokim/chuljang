@@ -2,6 +2,36 @@
 
 The public application is `https://chuljang.hanatrust.workers.dev`.
 
+## Temporary test mode
+
+`TEST_MODE=1` removes the application's username/password UI. Opening `/`
+creates a random, HttpOnly browser-specific test session; requests without that
+cookie cannot read an existing account. Normal member/admin accounts are kept
+and are not used as a shared anonymous workspace. Test workspaces and shares
+expire after 24 hours; the directory alarm deletes their data and queues home
+collector revocation. `/api/test-session/end` deletes only the current test
+workspace and requires the same-origin POST and its cookie.
+
+Home collector IDs beginning with `test-` always use a fresh browser and never
+load or save service authentication state. Deploy the matching home collector
+revision before turning this mode on. An old collector does not support this
+privacy guarantee. Existing normal accounts remain available if test mode is
+later turned off.
+
+Fresh KTX sessions enter the official `/ticket/login` page, wait for its real
+form and a stable authenticated state, and go directly to the first dated
+query without the intermediate protected history navigation. Tmoney uses its
+official mobile login/security-keypad path because its desktop login can
+request a Windows-only keyboard driver. Captchas and identity checks remain
+user actions on the official screen. Never remove those protections or send
+credentials from a replacement form.
+
+`tests/test-mode-smoke.mjs <origin>` verifies independent browser spaces,
+private files, templates, and identity/origin rejection. Add `--collector`
+only after deploying the home revision to check official-login readiness,
+mobile controls, and WSS. These checks do not validate a member's actual
+receipt totals; test dates and official member login are still needed.
+
 - **Cloudflare Worker:** UI, app sign-in, receipt APIs, trip management, report
   templates and export/share workflows. Static assets are hosted on Cloudflare.
 - **D1:** receipt, trip, template and share metadata. Existing owner IDs survive

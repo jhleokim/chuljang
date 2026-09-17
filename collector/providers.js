@@ -1,7 +1,7 @@
 export const DESTINATION = 'https://chuljang-receipts.jhleokim.chatgpt.site';
 export const SOURCES = [
-  { id: 'korail', source: 'ktx', name: 'KTX · 코레일', hosts: ['www.korail.com', 'korail.com', 'www.letskorail.com'], startUrl: 'https://www.korail.com/ticket/mypage/ticketInfo/receipt', enabled: true },
-  { id: 'tmoneyTransit', source: 'transit', name: '티머니 · 지하철·시내버스', hosts: ['pay.tmoney.co.kr'], startUrl: 'https://pay.tmoney.co.kr/ncs/pct/mtmn/ReadTrprInqr.dev', enabled: true },
+  { id: 'korail', source: 'ktx', name: 'KTX · 코레일', hosts: ['www.korail.com', 'korail.com', 'www.letskorail.com'], loginUrl: 'https://www.korail.com/ticket/login', startUrl: 'https://www.korail.com/ticket/mypage/ticketInfo/receipt', enabled: true },
+  { id: 'tmoneyTransit', source: 'transit', name: '티머니 · 지하철·시내버스', hosts: ['pay.tmoney.co.kr'], loginUrl: 'https://pay.tmoney.co.kr/MbrsLgn.dev', startUrl: 'https://pay.tmoney.co.kr/ncs/pct/mtmn/ReadTrprInqr.dev', enabled: true },
   { id: 'kobus', source: 'tmoney', name: '고속버스 · KOBUS', hosts: ['www.kobus.co.kr', 'kobus.co.kr'], startUrl: 'https://www.kobus.co.kr/mbrs/trprinqr/pymPtInqr.do', enabled: true },
   { id: 'hipass', source: 'hipass', name: '하이패스 · 통행료', hosts: ['www.hipass.co.kr', 'hipass.co.kr'], startUrl: 'https://www.hipass.co.kr/usepculr/InitUsePculrTabSearch.do', enabled: true },
   { id: 'koreanAir', source: 'airline', name: '대한항공', hosts: ['www.koreanair.com'], startUrl: 'https://www.koreanair.com/reservation/list', enabled: true },

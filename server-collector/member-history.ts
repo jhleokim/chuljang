@@ -14,7 +14,7 @@ export function transitAvailability(day:string,now=new Date()){
 export function memberQueryControls(provider:string){
  document.querySelectorAll('[data-chuljang-query]').forEach(node=>node.removeAttribute('data-chuljang-query'));
  const visible=(node:Element)=>!!node.getClientRects().length;
- const label=(node:Element)=>[node.getAttribute('aria-label'),node.getAttribute('title'),node.getAttribute('placeholder'),node.id,node.getAttribute('name'),...[...document.querySelectorAll('label')].filter(item=>item.getAttribute('for')===node.id).map(item=>item.textContent)].filter(Boolean).join(' ');
+ const label=(node:Element)=>[node.getAttribute('aria-label'),node.getAttribute('title'),node.getAttribute('placeholder'),node.id,node.getAttribute('name'),node.closest('label')?.textContent,...[...document.querySelectorAll('label')].filter(item=>item.getAttribute('for')===node.id).map(item=>item.textContent)].filter(Boolean).join(' ');
  const fields=[...document.querySelectorAll<HTMLInputElement>('input')].filter(node=>visible(node)&&!['hidden','password','checkbox','radio'].includes(node.type));
  const dates=fields.filter(node=>node.type==='date'||node.classList.contains('hasDatepicker')||/조회시작|조회종료|시작일|종료일|start.?date|end.?date|datepicker[3456]|search.*(?:from|to)|srch.*(?:strt|end)/i.test(label(node)));
  const start=dates.find(node=>/시작|start|strt|from|datepicker[35]$/i.test(label(node))),end=dates.find(node=>/종료|끝|end|to\b|datepicker[46]$/i.test(label(node)));
@@ -26,7 +26,8 @@ export function memberQueryControls(provider:string){
  const jq=(window as unknown as {jQuery?:(node:Element)=>{datepicker?:(command:string,option:string)=>unknown}}).jQuery;
  let minDate:unknown=first?.min||null;if(first?.classList.contains('hasDatepicker')&&jq){try{minDate=jq(first).datepicker?.('option','minDate');}catch{}}
  const travelQuery=first&&/승차|출발|탑승|이용|사용/.test(label(first));
- return {start:mark(first,'start'),end:mark(last,'end'),query:mark(query.length===1?query[0]:undefined,'submit'),card:mark(['tmoneyTransit','hipass'].includes(provider)&&card.length===1?card[0]:undefined,'card'),consents:consent.map((node,index)=>mark(node,'consent'+index)!),noCards:/등록된\s*카드가\s*없|등록하신\s*카드가\s*없/.test(document.body.innerText),travelQuery:!!travelQuery,minDate:typeof minDate==='number'||typeof minDate==='string'?minDate:null};
+ const form=first?.closest('form'),scopedQuery=form?query.filter(node=>form.contains(node)):query;
+ return {start:mark(first,'start'),end:mark(last,'end'),query:mark(scopedQuery.length===1?scopedQuery[0]:query.length===1?query[0]:undefined,'submit'),card:mark(['tmoneyTransit','hipass'].includes(provider)&&card.length===1?card[0]:undefined,'card'),consents:consent.map((node,index)=>mark(node,'consent'+index)!),noCards:/등록된\s*카드가\s*없|등록하신\s*카드가\s*없/.test(document.body.innerText),travelQuery:!!travelQuery,minDate:typeof minDate==='number'||typeof minDate==='string'?minDate:null};
 }
 export function memberResultSnapshot(provider:string){
  document.querySelectorAll('[data-chuljang-next]').forEach(node=>node.removeAttribute('data-chuljang-next'));
@@ -66,15 +67,20 @@ export function parseMemberRows(provider:string,headers:string[],rows:string[][]
  const kindIndex=normalized.findIndex(value=>/^(구분|거래구분|이용구분|거래유형)$/.test(value));
  const refIndex=normalized.findIndex(value=>/승인번호|예약번호|승차권번호|거래번호/.test(value));
  const routeIndex=normalized.findIndex(value=>/노선|이용내역|사용처|교통수단/.test(value));
+ const transportIndex=normalized.findIndex(value=>/^(교통수단|업종|사용처구분|이용처구분)$/.test(value));
  const from=normalized.findIndex(value=>/^(승차|출발|입구|진입)(역|지|정류장|영업소|톨게이트)?$/.test(value)),to=normalized.findIndex(value=>/^(하차|도착|출구|진출)(역|지|정류장|영업소|톨게이트)?$/.test(value));
  if(dateIndex<0||amountIndex<0)throw new MemberHistoryError('이용일과 결제금액 열을 확인하지 못했습니다. 결제일을 이용일로 대신하지 않았습니다.');
  const parsed=[];let cancelled=0;
  for(const cells of rows){
   if(cells.length!==headers.length)throw new MemberHistoryError('조회 표의 열 구성이 변경되었습니다.');
   if(statusIndex>=0&&/취소|환불|반환|미결제/.test(cells[statusIndex])||kindIndex>=0&&/충전|환불|취소/.test(cells[kindIndex])){cancelled++;continue;}
+  if(provider==='tmoneyTransit'&&transportIndex>=0&&!/버스|지하철|전철|철도|도시철도|대중교통/.test(cells[transportIndex])){
+   if(/택시|유통|편의점|주차|가맹점|구매/.test(cells[transportIndex]))continue;
+   throw new MemberHistoryError('티머니 내역의 교통수단을 확인하지 못했습니다. 일반 결제를 교통비로 저장하지 않았습니다.');
+  }
   const dates=[...cells[dateIndex].matchAll(/(20\d{2})[.년/\-\s]+(\d{1,2})[.월/\-\s]+(\d{1,2})/g)].map(match=>`${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`);
   if(dates.length!==1||!isDate(dates[0]))throw new MemberHistoryError('왕복 또는 날짜가 불명확한 내역입니다. 금액을 중복 배정하지 않도록 상세 확인이 필요합니다.');
-  if(dates[0]!==day)continue;
+  if(dates[0]!==day){if(provider!=='kobus')throw new MemberHistoryError('공식 조회 결과의 이용일이 선택 날짜와 다릅니다. 날짜 조건이 반영되지 않아 저장을 멈췄습니다.');continue;}
   const money=cells[amountIndex].replace(/\s|원|₩|￦|KRW/g,'');if(!/^(?:\d+|\d{1,3}(?:,\d{3})+)$/.test(money)||Number(money.replaceAll(',',''))>100000000)throw new MemberHistoryError('결제금액 형식을 확인하지 못했습니다.');
   const route=from>=0&&to>=0?cells[from]+' → '+cells[to]:routeIndex>=0?cells[routeIndex]:provider==='tmoneyTransit'?'티머니 대중교통':provider==='hipass'?'하이패스 통행료':'고속버스';
   parsed.push({date:day,amount:Number(money.replaceAll(',','')),reference:refIndex>=0?cells[refIndex]:'',route,original:headers.map((header,index)=>header+': '+cells[index]).join('\n')});
@@ -86,7 +92,7 @@ async function fillDay(page:Page,selector:string,day:string){
   const input=node as HTMLInputElement;
   const jq=(window as unknown as {jQuery?:(node:Element)=>{datepicker?:(command:string,date:Date)=>void}}).jQuery;
   if(input.classList.contains('hasDatepicker')&&jq){jq(input).datepicker?.('setDate',new Date(value+'T12:00:00'));}
-  else{const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!;setter.call(input,input.maxLength===8?value.replaceAll('-',''):value);}
+  else{const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!;const format=/^\d{8}$/.test(input.value)||input.maxLength===8?value.replaceAll('-',''):/^\d{4}\.\d{2}\.\d{2}$/.test(input.value)?value.replaceAll('-','.'):value;setter.call(input,format);}
   input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));
  },day);
 }
@@ -94,11 +100,14 @@ async function resultReady(page:Page,day:string,click:()=>Promise<unknown>,card=
  const date=day.replaceAll('-','');
  const response=page.waitForResponse(response=>{try{const req=response.request();if(new URL(response.url()).hostname!==new URL(page.url()).hostname||!['xhr','fetch','document'].includes(req.resourceType()))return false;const decoded=decodeURIComponent((req.postData()||'')+new URL(req.url()).search),query=decoded.replace(/[-.\s/]/g,'');return query.includes(date)&&(!card||decoded.includes(card));}catch{return false;}},{timeout:30000});
  const [reply]=await Promise.all([response,click()]);if(!reply.ok())throw new MemberHistoryError('공식 사이트가 조회 오류를 반환했습니다. 빈 내역으로 처리하지 않았습니다.');await reply.finished();
- await page.waitForFunction(()=>![...document.querySelectorAll('.loading,.ui-jqgrid-loading,[aria-busy="true"]')].some(node=>!!node.getClientRects().length),undefined,{timeout:15000});
+ await page.waitForFunction(()=>![...document.querySelectorAll('.loading,.ui-jqgrid-loading,.loadingui,[aria-busy="true"]')].some(node=>!!node.getClientRects().length),undefined,{timeout:15000});
+ // Allow the completed response's DOM update to commit before reading rows.
+ await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
 }
 export async function collectMemberDay(page:Page,provider:string,day:string,alive:()=>Promise<unknown>){
  const source=SOURCES.find(item=>item.id===provider);const verifiedPage=()=>{if(!source||!allowedUrl(page.url(),source))throw new MemberHistoryError('공식 서비스 주소를 벗어나 수집을 멈췄습니다.');};verifiedPage();
- const controls=await page.evaluate(memberQueryControls,provider);
+ await page.waitForFunction(()=>document.readyState==='complete',undefined,{timeout:20000});
+ let controls=await page.evaluate(memberQueryControls,provider);
  if(controls.noCards)throw new MemberHistoryError('계정에 등록된 카드가 없습니다. 공식 사이트에서 본인 카드를 등록하면 다음부터 자동 조회됩니다.');
  if(!controls.start||!controls.end||!controls.query||['tmoneyTransit','hipass'].includes(provider)&&!controls.card)throw new MemberHistoryError('회원 조회 화면의 날짜·카드·조회 버튼을 확인하지 못했습니다. 화면 구조 확인이 필요합니다.');
  for(const selector of controls.consents)await page.locator(selector).check();
@@ -116,7 +125,9 @@ export async function collectMemberDay(page:Page,provider:string,day:string,aliv
   queryEnd=today;if(day<queryStart)throw new MemberHistoryError('선택한 이용일은 KOBUS 화면의 일반 조회 기간을 지났습니다.');
  }
  for(const card of cards){
-  await alive();if(controls.card)await page.locator(controls.card).selectOption(card);await fillDay(page,controls.start,queryStart);await fillDay(page,controls.end,queryEnd);
+  await alive();controls=await page.evaluate(memberQueryControls,provider);
+  if(!controls.start||!controls.end||!controls.query)throw new MemberHistoryError('카드 변경 후 조회 화면을 확인하지 못했습니다.');
+  if(controls.card)await page.locator(controls.card).selectOption(card);await fillDay(page,controls.start,queryStart);await fillDay(page,controls.end,queryEnd);
   await resultReady(page,queryStart,()=>page.locator(controls.query!).click(),card);
   verifiedPage();
   const signatures=new Set<string>(),occurrences=new Map<string,number>();

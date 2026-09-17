@@ -25,3 +25,12 @@ export function serviceLoginState(provider:string){
  if([...document.querySelectorAll('a,button')].some(node=>visible(node)&&/^(로그아웃|log\s*out|sign\s*out)$/i.test((node.textContent||'').trim())))return true;
  return false;
 }
+
+// Wait for a usable official form instead of showing its empty bootstrap or
+// loading overlay as if the user should enter their credentials there.
+export function serviceLoginReady(provider:string){
+ const visible=(node:Element)=>!!node.getClientRects().length;
+ if([...document.querySelectorAll('input[type="password"]')].some(visible))return true;
+ if([...document.querySelectorAll('a,button')].some(node=>visible(node)&&/^(로그아웃|log\s*out|sign\s*out)$/i.test((node.textContent||'').trim())))return true;
+ return provider==='hipass'&&[...document.querySelectorAll('button,a')].some(node=>visible(node)&&/간편인증|공동인증서|아이핀/.test(node.textContent||''));
+}

@@ -8,7 +8,7 @@ export function collectionPlan(connections:AutoConnection[],dates:string[]){
   if(!primaryServices.includes(connection.providerId)||!connection.consentedAt)continue;
   const same=[...connection.requestedDates].sort().join(',')===key;
   if(active.includes(connection.state)){if(!same){if(key&&!connection.connected&&['queued','opening','login'].includes(connection.state))start.push(connection.providerId);else stop.push(connection.providerId);}continue;}
-  if(key&&(!same||connection.state==='stopped'))start.push(connection.providerId);
+  if(key&&connection.connected!==false&&(!same||connection.state==='stopped'))start.push(connection.providerId);
  }
  return {start,stop};
 }

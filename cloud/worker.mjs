@@ -32,11 +32,20 @@ export default {
     if(env.MIGRATION_LOCK==='1'&&!await directory.migrationStatus())return new Response('기존 자료를 옮기고 있습니다. 잠시 후 다시 접속해 주세요.',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});
     const upgrade=request.headers.get('upgrade')?.toLowerCase()==='websocket';
     if((!['GET','HEAD'].includes(request.method)||upgrade)&&request.headers.get('origin')!==origin)return new Response('Invalid origin',{status:403});
-    if(authPaths.has(url.pathname))return directory.accountRequest(request);
+    if(url.pathname==='/api/test-session/end'){
+      if(request.method!=='POST'||env.TEST_MODE!=='1')return new Response(null,{status:405});
+      if(!await directory.endTest(request.headers.get('cookie')||''))return new Response(null,{status:401});
+      return Response.json({ok:true},{headers:{'Cache-Control':'no-store','Set-Cookie':'chuljang_test_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'}});
+    }
+    if(authPaths.has(url.pathname)){if(env.TEST_MODE==='1')return new Response(null,{status:303,headers:{Location:'/', 'Cache-Control':'no-store'}});return directory.accountRequest(request);}
     if(url.pathname==='/home-assets/home.css'||url.pathname==='/home-assets/account.js')return new Response(url.pathname.endsWith('.css')?css:accountScript,{headers:{'Content-Type':url.pathname.endsWith('.css')?'text/css; charset=utf-8':'text/javascript; charset=utf-8','Cache-Control':'no-store'}});
     const headers=new Headers(request.headers);
     for(const key of [...headers.keys()])if(/^(oai-|x-middleware-|x-forwarded-|x-invoke-|x-now-|x-chuljang-)|^(forwarded|x-matched-path)$/.test(key))headers.delete(key);
-    const user=await directory.identity(request.headers.get('cookie')||'');
+    let user=await directory.identity(request.headers.get('cookie')||''),testCookie;
+    if(!user&&env.TEST_MODE==='1'&&request.method==='GET'&&url.pathname==='/'){
+      try{const started=await directory.beginTest(request.headers.get('cookie')||'',request.headers.get('cf-connecting-ip')||'local');user=started.user;testCookie=started.cookie;}
+      catch{return new Response('테스트 공간을 준비하지 못했습니다. 잠시 후 새로고침해 주세요.',{status:429,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});}
+    }
     const remote=url.pathname.startsWith('/remote/')||url.pathname.startsWith('/remote-assets/')||url.pathname==='/home-assets/remote.js';
     if(remote){
       if(!user)return new Response('Sign in required',{status:401});
@@ -50,6 +59,6 @@ export default {
     if(!user&&url.pathname.startsWith('/api/'))return Response.json({error:'로그인 후 이용해 주세요.'},{status:401});
     const response=await handler.fetch(new Request(request,{headers}),env,ctx);
     if(response.status===101)return response;
-    const output=new Response(response.body,response);output.headers.set('Cache-Control','private, no-store');output.headers.set('Referrer-Policy','no-referrer');output.headers.set('X-Content-Type-Options','nosniff');return output;
+    const output=new Response(response.body,response);if(testCookie)output.headers.append('Set-Cookie',testCookie);output.headers.set('Cache-Control','private, no-store');output.headers.set('Referrer-Policy','no-referrer');output.headers.set('X-Content-Type-Options','nosniff');return output;
   },
 };

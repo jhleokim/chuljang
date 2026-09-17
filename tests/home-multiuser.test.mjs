@@ -67,7 +67,7 @@ test('legacy-image rollback converts encrypted files without losing content',asy
 
 test('collectors keep credentials, captures, acknowledgements and revocation in the owning account',async t=>{
  const {auth,storage,key}=await fixture(t),alice=await member(auth,'alice'),bob=await member(auth,'bob');let sequence=0;
- const launch=async(slot,saved)=>{let url='',identity=saved?.cookies?.[0]?.value||'session-'+(++sequence);return{port:5900+slot,close:async()=>{},page:{url:()=>url,goto:async value=>{url=value;},evaluate:async fn=>fn.name==='serviceLoginState'?true:{inputs:[]}},context:{storageState:async()=>({cookies:[{name:'owner-cookie',value:identity}],origins:[]})}};};
+ const launch=async(slot,saved)=>{let url='',identity=saved?.cookies?.[0]?.value||'session-'+(++sequence);return{port:5900+slot,close:async()=>{},page:{waitForFunction:async()=>{},url:()=>url,goto:async value=>{url=value;},evaluate:async fn=>fn.name==='serviceLoginState'?true:{inputs:[]}},context:{storageState:async()=>({cookies:[{name:'owner-cookie',value:identity}],origins:[]})}};};
  const manager=new HomeCollectors(storage,key,launch,async()=>({blocks:['승차일 2026-09-09\n결제금액 59,800원'],completed:true}));t.after(()=>manager.close());
  const request=()=>({action:'start',providers:['korail'],requestedDates:['2026-09-09'],consent:true,jobId:randomUUID()});
  await Promise.all([manager.request(alice.id,request()),manager.request(bob.id,request())]);

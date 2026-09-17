@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { SOURCES, allowedUrl } from '../collector/providers.js';
 import { normalizeDates, matchTravelDate } from '../collector/date-scope.js';
 import { sealCollector, openCollector } from '../lib/collector-security.ts';
-import { serviceLoginState } from '../server-collector/history-dom.ts';
+import { serviceLoginState,serviceLoginReady } from '../server-collector/history-dom.ts';
 import { inspectMemberControls } from '../server-collector/member-inspection.ts';
 import { collectKorailDay, korailDayUrl } from '../server-collector/korail.ts';
 import {collectMemberDay,MemberHistoryError,transitAvailability} from '../server-collector/member-history.ts';
@@ -26,8 +26,10 @@ export class HomeCollector {
   private ownerId:string;
   private launch:typeof openBrowser;
   private collectDay:typeof collectKorailDay;
+  private retainLogin:boolean;
   constructor(storage:HomeStorage,secret:string,ownerId:string,launch=openBrowser,collectDay=collectKorailDay){
     this.storage=storage;this.secret=secret;this.ownerId=ownerId;this.launch=launch;this.collectDay=collectDay;
+    this.retainLogin=!ownerId.startsWith('test-')&&process.env.COLLECTOR_RETAIN_AUTH!=='0';
     if(secret.length<40)throw new Error('Missing collector encryption key');
     for(const source of SOURCES){const meta=this.meta(source.id);if(active(meta.state)){meta.state='queued';meta.loginUrl=undefined;this.save(meta);}}
   }
@@ -88,23 +90,35 @@ export class HomeCollector {
     let browser:Awaited<ReturnType<typeof openBrowser>>|undefined;const id=Buffer.from(randomBytes(24)).toString('hex');
     try{
       this.patch(provider,generation,{state:'opening',loginUrl:undefined});
-      browser=await this.launch(slot,await this.getSecret(provider,'auth'));this.alive(provider,generation);
+      const saved=this.retainLogin?await this.getSecret(provider,'auth'):undefined;
+      // Tmoney officially supports its mobile security keypad without the
+      // Windows-only keyboard driver. Keep that supported mobile path intact.
+      browser=await this.launch(slot,saved,{mobile:provider==='tmoneyTransit'});this.alive(provider,generation);
       this.sessions.set(id,{owner:this.ownerId,provider,generation,port:browser.port,close:browser.close});
       const {page,context}=browser;
-      await page.goto(source.startUrl,{waitUntil:'domcontentloaded',timeout:30000});
+      // A protected KTX history deep link opens its access-warning dialog first.
+      // Fresh sessions must start at the official login route, not that guard.
+      await page.goto(!saved&&source.loginUrl?source.loginUrl:source.startUrl,{waitUntil:'domcontentloaded',timeout:45000});
+      if(source.loginUrl)await page.waitForFunction(serviceLoginReady,provider,{timeout:40000});
       const verified=async()=>{try{return allowedUrl(page.url(),source)&&await page.evaluate(serviceLoginState,provider);}catch(error){if(/Execution context was destroyed|Cannot find context/i.test(String(error)))return false;throw error;}};
       if(!await verified()){
         this.patch(provider,generation,{state:'login',connected:false,loginUrl:'/remote/'+id+'/',note:'공식 사이트에 로그인하면 날짜 조회를 자동으로 이어갑니다.'});
-        const deadline=Date.now()+300000;
-        while(!await verified()){
+        const deadline=Date.now()+600000;let ready=0;
+        while(ready<3){
           this.alive(provider,generation);if(Date.now()>deadline)throw new Error('Login expired');
-          await new Promise(resolve=>setTimeout(resolve,1500));
+          ready=await verified()?ready+1:0;
+          if(ready<3)await new Promise(resolve=>setTimeout(resolve,1000));
         }
-        await page.goto(source.startUrl,{waitUntil:'domcontentloaded',timeout:30000});
-        if(!await verified())throw new Error('Login could not be verified');
       }
+      // Keep the current browser throughout authentication and all selected
+      // dates. KTX's first dated query navigates itself; an extra history load
+      // races its SPA authentication redirect and can trigger another login.
+      if(provider!=='korail'&&new URL(page.url()).pathname!==new URL(source.startUrl).pathname){
+        await page.goto(source.startUrl,{waitUntil:'domcontentloaded',timeout:45000});
+      }
+      if(provider!=='korail')await page.waitForFunction(serviceLoginState,provider,{timeout:20000});
       this.sessions.delete(id);
-      await this.putSecret(provider,'auth',await context.storageState({indexedDB:true}),generation);
+      if(this.retainLogin)await this.putSecret(provider,'auth',await context.storageState({indexedDB:true}),generation);
       this.patch(provider,generation,{connected:true,state:'collecting',loginUrl:undefined,note:'선택한 출장 날짜를 조회하고 있어요.'});
       if(!['korail','tmoneyTransit','kobus','hipass'].includes(provider)){
         this.patch(provider,generation,{state:'adapter_pending',inspection:await page.evaluate(inspectMemberControls),note:'로그인은 연결됐습니다. 회원 조회 화면에 맞춘 자동 수집 검증이 아직 필요합니다.'});return;
@@ -123,7 +137,7 @@ export class HomeCollector {
           if(sealed)this.storage.set(this.key(provider,'capture:'+captureId),sealed);
           this.save({...current,pending:sealed?[...current.pending,captureId]:current.pending,completedDates:[...current.completedDates,day],count:current.count+result.blocks.length});
         });
-        await this.putSecret(provider,'auth',await context.storageState({indexedDB:true}),generation);
+        if(this.retainLogin)await this.putSecret(provider,'auth',await context.storageState({indexedDB:true}),generation);
       }
     }catch(error){
       if(!(error instanceof Revoked)&&this.meta(provider).generation===generation&&!this.closing){
@@ -131,7 +145,7 @@ export class HomeCollector {
         const inspection=browser?await browser.page.evaluate(inspectMemberControls).catch(()=>undefined):undefined;
         this.patch(provider,generation,{state:'error',inspection,loginUrl:undefined,note:error instanceof MemberHistoryError?error.message:error instanceof Error&&error.message==='Login expired'?'로그인 시간이 만료됐어요. 다시 연결해 주세요.':'서비스 연결 또는 날짜 조회를 마치지 못했습니다. 다시 연결해 주세요.'});
       }
-    }finally{this.sessions.delete(id);await browser?.close().catch(()=>{});}
+    }finally{this.sessions.delete(id);await browser?.close().catch(()=>{});if(!this.retainLogin&&this.meta(provider).generation===generation){const meta=this.meta(provider);this.save({...meta,connected:false,loginUrl:undefined});}}
   }
   async close(){this.closing=true;await Promise.all([...this.sessions.values()].map(value=>value.close()));this.sessions.clear();await Promise.allSettled(this.running.values());}
 }

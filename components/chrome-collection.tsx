@@ -9,8 +9,8 @@ import {SOURCES} from '@/collector/providers.js';
 import {collectionPlan,primaryServices} from '@/lib/collection-plan';
 import type {CollectionStatus} from '@/lib/server-collector';
 const labels:Record<string,string>={disconnected:'로그인 전',queued:'자동 조회 대기',opening:'로그인 준비 중',login:'로그인해 주세요',collecting:'자동 수집 중',complete:'선택 날짜 조회 완료',partial:'일부 수집',adapter_pending:'회원 조회 연동 검증 필요',error:'자동 조회 실패',stopped:'날짜 변경 반영 중'};
-type Props={signedIn:boolean;upload:()=>void;requestedDates:string[];onDatesChange:(days:string[])=>void;skipCaptures:()=>string[];onCapture:(packet:unknown,id:string)=>Promise<void>;onProgress?:(working:boolean)=>void};
-export function TripCollection({signedIn,requestedDates,onDatesChange,skipCaptures,onCapture,onProgress}:Props){
+type Props={signedIn:boolean;testMode?:boolean;upload:()=>void;requestedDates:string[];onDatesChange:(days:string[])=>void;skipCaptures:()=>string[];onCapture:(packet:unknown,id:string)=>Promise<void>;onProgress?:(working:boolean)=>void};
+export function TripCollection({signedIn,testMode=false,requestedDates,onDatesChange,skipCaptures,onCapture,onProgress}:Props){
  const [status,setStatus]=useState<CollectionStatus|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[settledDates,setSettledDates]=useState<string[]>(requestedDates);
  const [statusUpdatedAt,setStatusUpdatedAt]=useState<string|null>(null),[pollError,setPollError]=useState('');
  const latest=useRef({status,skipCaptures,onCapture,statusUpdatedAt,pollError,onProgress});latest.current={status,skipCaptures,onCapture,statusUpdatedAt,pollError,onProgress};
@@ -57,21 +57,21 @@ export function TripCollection({signedIn,requestedDates,onDatesChange,skipCaptur
   try{void Promise.resolve(context.registerTool({name:'collection_status',title:'자동 수집 진행 상태',description:'서비스 연결과 날짜별 수집 상태를 읽습니다. 마지막 확인 시각과 연결 오류를 포함하며 로그인 링크·비밀번호·영수증 원문은 반환하지 않습니다.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,untrustedContentHint:true},execute(input){if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).length)throw new Error('빈 객체를 입력하세요.');return {configured:latest.current.status?.configured||false,statusUpdatedAt:latest.current.statusUpdatedAt,pollError:latest.current.pollError,connections:(latest.current.status?.connections||[]).map(({loginUrl,...item})=>item)};}},{signal:lifecycle.signal})).catch(()=>{});}catch{}return()=>lifecycle.abort();
  },[]);
 return <><section className="date-journey" aria-labelledby="date-heading">
-    <ol className="journey-steps"><li className={signedIn?'done':''}>01 로그인</li><li className="active">02 출장 날짜 선택</li><li>03 자동 조회·저장</li></ol>
+    <ol className="journey-steps"><li className="active">01 출장 날짜 선택</li><li>02 공식 서비스 로그인</li><li>03 자동 조회·파일 저장</li></ol>
     <div className="date-content"><div className="date-copy"><span className="eyebrow">WHEN DID YOU TRAVEL?</span><h2 id="date-heading">출장 다녀온 날만<br/>골라주세요.</h2><p>하루씩 눌러 여러 날짜를 선택하세요.<br/>날짜가 바뀌면 연결된 서비스에서 자동으로 조회합니다.</p>
       <div className="selected-days" aria-live="polite"><strong>{requestedDates.length ? requestedDates.length+'일 선택됨' : '아직 선택한 날짜가 없어요'}</strong><div>{requestedDates.map(day=><button key={day}  onClick={()=>onDatesChange(requestedDates.filter(value=>value!==day))} aria-label={day+' 선택 해제'}>{day.slice(5).replace('-', '. ')} <span aria-hidden="true">×</span></button>)}</div></div>
       {!!requestedDates.length && <button className="clear-days"  onClick={()=>onDatesChange([])}>날짜 선택 초기화</button>}
     </div><div className="trip-calendar"><Calendar mode="multiple" locale={ko} weekStartsOn={1} selected={requestedDates.map(day=>new Date(day+'T12:00:00'))} onSelect={days=>onDatesChange((days||[]).map(day=>format(day,'yyyy-MM-dd')).sort())} max={62} disabled={{after:new Date()}} captionLayout="dropdown" startMonth={new Date(2020,0)} endMonth={new Date()} labels={{labelNext:()=> '다음 달',labelPrevious:()=> '이전 달'}}/><p>최대 62일 · 선택하지 않은 날짜는 제외</p></div></div>
 
 
-  </section><section className="connected-transit" aria-label="교통 서비스 로그인"><div className="transit-heading"><div><span className="eyebrow">CONNECT ONCE</span><h2>사용한 서비스에 로그인하세요.</h2><p>로그인 성공을 자동 감지합니다. 다음 방문에는 연결 상태를 재사용해요.</p></div>{busy&&<span className="auto-indicator"><LoaderCircle size={16} className="animate-spin"/> 날짜 반영 중</span>}</div>
+  </section><section className="connected-transit" aria-label="교통 서비스 로그인"><div className="transit-heading"><div><span className="eyebrow">OFFICIAL SERVICE LOGIN</span><h2>사용한 서비스에 로그인하세요.</h2><p>{testMode?'공식 사이트 화면에서 직접 로그인하면 선택한 날짜를 자동 조회합니다. 로그인 상태는 이번 조회에만 사용합니다.':'로그인 성공을 자동 감지합니다. 다음 방문에는 연결 상태를 재사용해요.'}</p></div>{busy&&<span className="auto-indicator"><LoaderCircle size={16} className="animate-spin"/> 날짜 반영 중</span>}</div>
  <div className="transit-connections">{SOURCES.filter(source=>primaryServices.includes(source.id)).map(provider=>{const item=status?.connections.find(connection=>connection.providerId===provider.id),state=item?.state||'disconnected',Icon=provider.id==='korail'?TrainFront:provider.id==='hipass'?CarFront:BusFront;
  return <article className={'transit-card provider-'+provider.id} key={provider.id}><div className="transit-card-title"><span className="transit-symbol"><Icon size={25}/></span><div><h3>{provider.name}</h3><span className={'connection-state state-'+state}>{labels[state]||state}</span></div></div><p>{item?.note||(provider.id==='tmoneyTransit'?'등록된 티머니 카드의 지하철·시내버스 이용내역':'로그인 후 선택한 날짜를 자동으로 조회합니다.')}</p>
- {!item?.connected?<Button disabled={busy||!requestedDates.length||(signedIn&&!status?.configured)} onClick={()=>void login(provider.id)}><LogIn size={16}/> 로그인</Button>:<div className="connected-label"><Check size={17}/> 로그인 연결됨{item.count?' · '+item.count+'건':''}</div>}
+ {!item?.connected?<Button disabled={busy||!requestedDates.length||(signedIn&&!status?.configured)} onClick={()=>void login(provider.id)}><LogIn size={16}/> 공식 로그인 열기</Button>:<div className="connected-label"><Check size={17}/> 로그인 연결됨{item.count?' · '+item.count+'건':''}</div>}
  {item?.loginUrl&&<a className="login-fallback" href={item.loginUrl} target="_blank" rel="noopener noreferrer">로그인 창 다시 열기 <ArrowUpRight size={13}/></a>}
  {item?.connected&&['error','partial'].includes(state)&&<Button disabled={busy||!requestedDates.length} onClick={()=>void retry(provider.id)}>조회 다시 시도</Button>}
  {item?.consentedAt&&<button className="disconnect-service" disabled={busy} onClick={()=>void action({action:'disconnect',providers:[provider.id]}).catch(err=>setError(err.message))}><Unplug size={12}/> 연결 해제</button>}</article>;})}</div>
- <p className="consent-note">서비스 로그인은 선택한 출장일 내역 조회와 로그인 상태 암호화 보관에 동의하는 과정입니다. 연결은 언제든 해제할 수 있어요.</p>
+ <p className="consent-note">{testMode?'공식 로그인 열기를 누르면 홈서버에서 선택 날짜를 조회하고 결과를 Cloudflare에 임시 보관하는 데 동의합니다. 운영자는 처리 중인 자료에 접근할 수 있습니다. 앱에서 비밀번호나 로그인 상태를 저장하지 않습니다.':'서비스 로그인은 선택한 출장일 내역 조회와 로그인 상태 암호화 보관에 동의하는 과정입니다. 연결은 언제든 해제할 수 있어요.'}</p>
  <p className="transit-availability">티머니는 등록된 카드만 조회됩니다. 오늘·어제 내역은 아직 제공되지 않을 수 있으며, 신용·체크카드 후불교통은 카드사 내역이 필요합니다.</p>
  {pollError&&<p className="chrome-error" role="status">{pollError}</p>}{error&&<p className="chrome-error" role="alert">{error}</p>}</section></>;
 }

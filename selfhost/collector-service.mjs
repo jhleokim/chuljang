@@ -6,6 +6,7 @@ import {WebSocketServer,createWebSocketStream} from 'ws';
 import {HomeStorage} from './storage.mjs';
 import {HomeCollectors} from './collector-manager.ts';
 import {signCollector,verifyCollector} from '../lib/collector-security.ts';
+import {remotePage} from './remote-page.mjs';
 
 export async function startCollectorService() {
   const origin=process.env.CLOUD_ORIGIN,secret=process.env.CHULJANG_COLLECTOR_SECRET;
@@ -33,7 +34,7 @@ export async function startCollectorService() {
     const send=(status,body,type='text/plain; charset=utf-8')=>{res.writeHead(status,{'Content-Type':type});res.end(body);};
     try {
       const url=new URL(req.url,origin);
-      if(url.pathname==='/healthz')return send(200,'home-collector-ready');
+      if(url.pathname==='/healthz'){res.setHeader('X-Chuljang-Collector-Revision','test-login-v1');return send(200,'home-collector-ready');}
       if(url.pathname==='/collector'){
         if(req.method!=='POST')return send(405,'Method not allowed');
         let text='';for await(const chunk of req){text+=chunk.toString();if(Buffer.byteLength(text)>32768)return send(413,'Too large');}
@@ -56,7 +57,7 @@ export async function startCollectorService() {
       if(!session||session.owner!==proof.owner)return send(410,'Login window has closed');
       if(match[2])return send(200,'{"active":true}','application/json');
       res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; base-uri 'none'; frame-ancestors 'none'");
-      return send(200,'<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>공식 서비스 로그인 · 출장</title><link rel="stylesheet" href="/home-assets/home.css"><body class="remote"><header><strong>공식 서비스 로그인</strong><span id="status">로그인하면 나머지는 자동으로 진행됩니다.</span></header><div id="screen"></div><script type="module" src="/home-assets/remote.js"></script></body></html>','text/html; charset=utf-8');
+      return send(200,remotePage(session.provider),'text/html; charset=utf-8');
     } catch {if(!res.headersSent)send(500,'Collector request failed');else res.end();}
   });
   server.on('upgrade',async(req,socket,head)=>{

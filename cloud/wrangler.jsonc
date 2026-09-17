@@ -8,6 +8,7 @@
   "workers_dev": true,
   "preview_urls": false,
   "vars": {
+    "TEST_MODE": "1",
     "MIGRATION_LOCK": "1",
     "HOME_ORIGIN": "https://chuljang.hanatrust.workers.dev",
     "CHULJANG_COLLECTOR_URL": "https://chuljang-jhleokim.asuscomm.com/collector"

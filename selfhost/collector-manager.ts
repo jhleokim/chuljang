@@ -35,11 +35,11 @@ export class HomeCollectors {
   if(this.closing||this.revoking.has(owner)||!this.storage.sql.prepare('SELECT 1 FROM home_users WHERE id=? AND disabled=0').get(owner))throw new Error('Unknown collector owner');
   let entry=this.entries.get(owner);if(entry)return entry.collector;
   const abort=new AbortController();
-  const launch:typeof openBrowser=async(_slot,saved)=>{
+  const launch:typeof openBrowser=async(_slot,saved,options)=>{
    const lease=await this.pool.acquire(owner,abort.signal);
    try{
     if(abort.signal.aborted)throw new Error('Collector closed');
-    const browser=await this.launch(lease.slot,saved);let closing:Promise<void>|undefined;
+    const browser=await this.launch(lease.slot,saved,options);let closing:Promise<void>|undefined;
     return {...browser,close:()=>closing||=(async()=>{try{await browser.close();}finally{lease.release();}})()};
    }catch(error){lease.release();throw error;}
   };
