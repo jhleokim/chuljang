@@ -53,3 +53,6 @@ next-env.d.ts
 /selfhost-data/
 /selfhost/.env
 /selfhost/admin-password.txt
+/cloud/.wrangler/
+/cloud/.dev.vars*
+/cloud/worker-configuration.d.ts

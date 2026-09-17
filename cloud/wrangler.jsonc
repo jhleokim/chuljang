@@ -1,0 +1,19 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "chuljang",
+  "account_id": "bc682cc44caf5e9d28f2f06218af3420",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-09-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": {
+    "MIGRATION_LOCK": "1",
+    "HOME_ORIGIN": "https://chuljang.hanatrust.workers.dev",
+    "CHULJANG_COLLECTOR_URL": "https://chuljang-jhleokim.asuscomm.com/collector"
+  },
+  "d1_databases": [{"binding":"DB","database_name":"chuljang-app","database_id":"c43ef92b-b513-4722-a4af-91253b014d45","migrations_dir":"../drizzle"}],
+  "durable_objects": {"bindings":[{"name":"ACCOUNTS","class_name":"AccountDirectory"},{"name":"PRIVATE_FILES","class_name":"PrivateFile"}]},
+  "migrations": [{"tag":"cloud-v1","new_sqlite_classes":["AccountDirectory","PrivateFile"]}],
+  "observability": {"enabled":false}
+}

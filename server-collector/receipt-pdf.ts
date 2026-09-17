@@ -1,3 +1,4 @@
+import {Buffer} from 'node:buffer';
 import type {Page} from '@cloudflare/playwright';
 export function receiptPrintDocument(){
  const original=document.querySelector('.receipt_popup');if(!original)throw new Error('영수증 원문이 없습니다.');
@@ -26,6 +27,6 @@ export async function korailReceiptPdf(page:Page,references:string[],day:string)
   await printPage.setContent(html,{waitUntil:'load',timeout:25000});await printPage.emulateMedia({media:'screen'});
   const bytes=await printPage.pdf({format:'A4',printBackground:true});
   if(bytes.length>1500000)throw new Error('영수증 PDF 묶음이 너무 커 자동 저장을 마치지 못했습니다.');
-  return {name:`코레일-영수증-${day}.pdf`,mimeType:'application/pdf' as const,base64:bytes.toString('base64')};
+  return {name:`코레일-영수증-${day}.pdf`,mimeType:'application/pdf' as const,base64:Buffer.from(bytes).toString('base64')};
  }finally{await printPage.close();}
 }

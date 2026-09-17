@@ -1,7 +1,8 @@
 import { env } from 'cloudflare:workers';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
+import {fileBucket} from '../cloud/file-bucket.mjs';
 export function db(){if(!env.DB)throw new Error('저장소를 사용할 수 없습니다.');return env.DB;}
-export function bucket(){if(!env.BUCKET)throw new Error('파일 저장소를 사용할 수 없습니다.');return env.BUCKET;}
+export function bucket(){const files=Reflect.get(env,'PRIVATE_FILES');if(files)return fileBucket(files) as unknown as R2Bucket;if(!env.BUCKET)throw new Error('파일 저장소를 사용할 수 없습니다.');return env.BUCKET;}
 export async function owner(request?:Request){
  const user=await getChatGPTUser();if(!user)throw new HttpError(401,'로그인 후 이용해 주세요.');
  if(request&&request.method!=='GET'){

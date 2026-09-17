@@ -21,7 +21,7 @@ import { ReportExport } from '@/components/report-export';
 import { automaticImportBody, prepareAutomaticImport } from '@/lib/auto-import';
 import { normalizeDates } from '../collector/date-scope.js';
 import { attachmentFile,type ReceiptAttachment } from '@/lib/receipt-attachment';
-const icons={ktx:TrainFront,transit:BusFront,kakaot:CarFront,tmoney:BusFront,airline:Plane,socar:CarFront};
+const icons={ktx:TrainFront,transit:BusFront,kakaot:CarFront,tmoney:BusFront,hipass:CarFront,airline:Plane,socar:CarFront};
 
 type Packet={source:Source;blocks:string[];sourceUrl?:string;automatic?:boolean;requestedDates?:string[];attachment?:ReceiptAttachment};
 const format=(n:number)=>new Intl.NumberFormat('ko-KR').format(n);

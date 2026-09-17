@@ -22,7 +22,7 @@ export function accountPage(auth,id,message=''){
  const labels={login:'로그인',logout_all:'전체 기기 로그아웃',password_changed:'비밀번호 변경',invite_created:'초대 생성',invite_revoked:'초대 종료',account_created:'계정 생성',recovery_created:'복구 코드 변경',account_recovered:'계정 복구',account_disabled:'계정 중지',account_enabled:'계정 재개'};
  return page('계정과 보안',`<p><strong>${escape(user.username)}</strong> · ${user.role==='admin'?'관리자':'개인 계정'} · 로그인된 기기 ${sessions}개</p><p role="status">${escape(message)}</p><section><h2>로그인 관리</h2><p>최대 7일, 24시간 동안 사용하지 않으면 로그인이 만료됩니다.</p>${form('logout','','이 기기 로그아웃')}${form('logout_all','','전체 기기 로그아웃')}</section><section><h2>비밀번호 변경</h2>${form('password',current+password,'변경하고 전체 기기 로그아웃')}</section><section><h2>복구 코드</h2><p>분실에 대비해 일회용 코드를 안전하게 보관하세요. 새로 만들면 기존 코드는 사용할 수 없습니다.</p>${form('recovery',current,'새 복구 코드 만들기')}</section>${admin}<section><h2>최근 보안 기록</h2><ul>${events.map(event=>`<li>${escape(new Date(event.time).toLocaleString('ko-KR'))} · ${escape(labels[event.action]||'계정 변경')}</li>`).join('')}</ul></section><section><h2>데이터 보관</h2>${privacy()}${user.role!=='admin'?form('delete',current+'<label>확인을 위해 아이디를 입력하세요<input name="confirm" required autocomplete="off"></label><p>계정, 영수증, 양식, 공유 링크와 서비스 연결을 삭제합니다. 되돌릴 수 없습니다.</p>','내 계정과 데이터 삭제'):'<p>서버 관리자 계정의 삭제는 서버 이전 후 진행해야 합니다.</p>'}</section>`,{wide:true});
 }
-export async function handleAccount({req,res,url,auth,collector,user,send}){
+export async function handleAccount({req,res,url,auth,collector,user,send,accountChanged=async()=>{},deleteData=deleteAccountData}){
  if(!['/join','/recover','/account'].includes(url.pathname))return false;
  res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
  const html=(status,body)=>send(status,body,'text/html; charset=utf-8');
@@ -37,7 +37,7 @@ export async function handleAccount({req,res,url,auth,collector,user,send}){
    invitation=data.get('invite')||'';
    if(user)throw new AccountError(409,'먼저 현재 계정에서 로그아웃해 주세요.');
    if(data.get('accepted')!=='yes')throw new AccountError(400,'데이터 보관 방식을 확인해 주세요.');
-   const result=await auth.register(data.get('invite'),data.get('username'),data.get('password'),data.get('consent_version'));res.setHeader('Set-Cookie',result.cookie);
+   const result=await auth.register(data.get('invite'),data.get('username'),data.get('password'),data.get('consent_version'));await accountChanged(result.id);res.setHeader('Set-Cookie',result.cookie);
    html(201,secretPage('계정이 만들어졌습니다',result.recovery,'비밀번호를 잊었을 때 사용할 일회용 복구 코드입니다.'));return true;
   }
   if(url.pathname==='/recover'){await auth.recover(data.get('username'),data.get('recovery'),data.get('password'));res.setHeader('Set-Cookie',auth.cookie('',0));redirect('/signin-with-chatgpt');return true;}
@@ -50,13 +50,13 @@ export async function handleAccount({req,res,url,auth,collector,user,send}){
   if(auth.user(req.headers.cookie)!==user)throw new AccountError(403,'다시 로그인해 주세요.');
   if(action==='invite'){const invite=auth.createInvite(user);html(200,secretPage('초대 링크',auth.origin+'/join#'+invite.token,'7일 이내 한 사람만 가입할 수 있습니다. 받는 사람에게 직접 전달하세요.'));return true;}
   if(action==='revoke_invite')auth.revokeInvite(user,data.get('invite_id'));
-  if(action==='disable'||action==='enable'){const target=data.get('target');auth.disable(user,target,action==='disable');if(action==='disable')await collector.revoke(target);}
+  if(action==='disable'||action==='enable'){const target=data.get('target');auth.disable(user,target,action==='disable');await accountChanged(target);if(action==='disable')await collector.revoke(target);}
   if(action==='recovery'){html(200,secretPage('새 복구 코드',auth.newRecovery(user),'기존 복구 코드는 더 이상 사용할 수 없습니다.'));return true;}
   if(action==='delete'){
    if(user===auth.ownerId||auth.account(user).username!==data.get('confirm'))throw new AccountError(400,'삭제할 계정의 아이디를 확인해 주세요.');
    // Disable first, so concurrent requests and collectors cannot restore deleted data.
-   auth.storage.sql.prepare('UPDATE home_users SET disabled=1 WHERE id=?').run(user);auth.storage.set('account-delete:'+user,user);auth.logoutAll(user);await collector.revoke(user);
-   await deleteAccountData(auth,user);res.setHeader('Set-Cookie',auth.cookie('',0));res.setHeader('Clear-Site-Data','"cache", "storage"');html(200,page('삭제했습니다','<p>계정과 저장 데이터가 삭제됐습니다. 기존 백업에는 보관 기간 동안 남을 수 있습니다.</p>'));return true;
+   auth.storage.sql.prepare('UPDATE home_users SET disabled=1 WHERE id=?').run(user);auth.storage.set('account-delete:'+user,user);auth.logoutAll(user);await accountChanged(user);await collector.revoke(user);
+   await deleteData(auth,user);res.setHeader('Set-Cookie',auth.cookie('',0));res.setHeader('Clear-Site-Data','"cache", "storage"');html(200,page('삭제했습니다','<p>계정과 저장 데이터가 삭제됐습니다. 기존 백업에는 보관 기간 동안 남을 수 있습니다.</p>'));return true;
   }
   redirect('/account');return true;
  }catch(error){const status=error instanceof AccountError?error.status:500,message=error instanceof AccountError?error.message:'처리하지 못했습니다. 잠시 후 다시 시도해 주세요.';html(status,url.pathname==='/join'?joinPage(message,invitation):url.pathname==='/recover'?recoveryPage(message):page('처리하지 못했습니다',`<p role="alert">${escape(message)}</p><a href="/account">계정으로 돌아가기</a>`));return true;}

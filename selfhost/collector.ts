@@ -1,3 +1,4 @@
+import {Buffer} from 'node:buffer';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { SOURCES, allowedUrl } from '../collector/providers.js';
@@ -84,7 +85,7 @@ export class HomeCollector {
   private async closeProvider(provider:string){for(const [id,session]of this.sessions){if(session.provider===provider){this.sessions.delete(id);await session.close();}}}
   private async run(provider:string){
     const generation=this.meta(provider).generation,source=SOURCES.find(value=>value.id===provider)!,slot=SOURCES.indexOf(source);
-    let browser:Awaited<ReturnType<typeof openBrowser>>|undefined;const id=randomBytes(24).toString('hex');
+    let browser:Awaited<ReturnType<typeof openBrowser>>|undefined;const id=Buffer.from(randomBytes(24)).toString('hex');
     try{
       this.patch(provider,generation,{state:'opening',loginUrl:undefined});
       browser=await this.launch(slot,await this.getSecret(provider,'auth'));this.alive(provider,generation);
@@ -105,7 +106,7 @@ export class HomeCollector {
       this.sessions.delete(id);
       await this.putSecret(provider,'auth',await context.storageState({indexedDB:true}),generation);
       this.patch(provider,generation,{connected:true,state:'collecting',loginUrl:undefined,note:'선택한 출장 날짜를 조회하고 있어요.'});
-      if(!['korail','tmoneyTransit','kobus'].includes(provider)){
+      if(!['korail','tmoneyTransit','kobus','hipass'].includes(provider)){
         this.patch(provider,generation,{state:'adapter_pending',inspection:await page.evaluate(inspectMemberControls),note:'로그인은 연결됐습니다. 회원 조회 화면에 맞춘 자동 수집 검증이 아직 필요합니다.'});return;
       }
       for(;;){

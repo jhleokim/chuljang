@@ -2,6 +2,11 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {parseHTML} from 'linkedom';
 import {transitAvailability,parseMemberRows,memberQueryControls,memberResultSnapshot} from '../server-collector/member-history.ts';
 const day='2026-09-11';
+test('Hi-Pass uses passage dates and tolls, excludes refunds, and rejects payment-only dates',()=>{
+ const result=parseMemberRows('hipass',['결제일자','사용일시','입구영업소','출구영업소','통행요금','거래구분'],[['2026-09-15',day+' 09:30','서울','수원','2,300원','사용'],['2026-09-15',day+' 09:30','서울','수원','2,300원','환불']],day);
+ assert.equal(result.rows.length,1);assert.equal(result.rows[0].amount,2300);assert.equal(result.rows[0].route,'서울 → 수원');assert.equal(result.cancelled,1);
+ assert.throws(()=>parseMemberRows('hipass',['결제일자','통행요금'],[[day,'2300']],day),/이용일/);
+});
 test('Tmoney availability follows Korea midnight and never equates recent or old unavailable dates with zero spend',()=>{
  const now=new Date('2026-09-14T15:01:00Z');assert.match(transitAvailability('2026-09-14',now),/이틀/);assert.equal(transitAvailability('2026-09-13',now),null);assert.match(transitAvailability('2025-01-01',now),/기간/);
 });

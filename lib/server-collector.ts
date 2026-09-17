@@ -11,7 +11,7 @@ export async function collectorRequest<T>(ownerId:string,values:Record<string,un
  const local=homeCollector();if(local)return await local.request(ownerId,values) as T;
  const {url,secret}=configuration();if(!url||!secret)throw new HttpError(503,'서버 수집 연결을 준비하고 있습니다.');
  const target=new URL(url);if(target.protocol!=='https:'||target.username||target.password)throw new HttpError(503,'수집 서버 설정을 확인해 주세요.');
- const body=JSON.stringify({...values,owner:ownerId}),timestamp=String(Date.now());
+ const body=JSON.stringify({...values,owner:ownerId,nonce:crypto.randomUUID()}),timestamp=String(Date.now());
  let response:Response;
  try{response=await fetch(target,{method:'POST',headers:{'Content-Type':'application/json','x-collector-time':timestamp,'x-collector-signature':await signCollector(secret,timestamp,body)},body,signal:AbortSignal.timeout(25000)});}catch{throw new HttpError(502,'수집 서버 응답이 지연되고 있어요. 잠시 후 다시 확인해 주세요.');}
  if(!response.ok)throw new HttpError(response.status===400?400:502,'수집 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.');

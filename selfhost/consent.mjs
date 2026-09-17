@@ -1,6 +1,6 @@
-export const consentVersion='2026-09-17-v1';
+export const consentVersion='2026-09-18-v2';
 // Keep the version and exact notice together so consent records remain interpretable.
-export const consentNotice=`이 서비스는 개인이 운영하는 홈서버에서 출장 영수증을 수집하고 정리합니다.
+export const consentNotice=`이 서비스의 웹앱·계정·영수증·양식·공유 파일은 Cloudflare에서 처리하고 보관합니다. 공식 서비스에 로그인해 영수증을 수집하는 브라우저는 개인이 운영하는 홈서버에서 실행됩니다. Cloudflare는 웹 접속과 수집 화면 통신을 중계합니다.
 서버 운영자는 관리 권한으로 영수증, 출장 날짜, 결제 내역, 업로드한 양식 및 저장된 서비스 로그인 상태에 접근할 수 있습니다. 운영자도 읽을 수 없는 종단간 암호화 서비스가 아닙니다.
 서비스 로그인과 조회는 홈서버의 원격 브라우저에서 진행됩니다. 로그인 상태는 다음 조회를 위해 암호화해 보관하며, 서비스 연결 해제 시 제거됩니다. 이용 내역은 계정별로 분리되고 정산 파일 작성에 사용됩니다.
 원본 파일은 서버에서 암호화해 보관하지만 날짜·금액 등 DB 정보는 별도 암호화하지 않습니다. 암호화 키도 운영자가 관리합니다.

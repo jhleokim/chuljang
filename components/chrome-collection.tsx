@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
-import {ArrowUpRight,Check,LogIn,LoaderCircle,TrainFront,BusFront,Unplug} from 'lucide-react';
+import {ArrowUpRight,Check,LogIn,LoaderCircle,TrainFront,BusFront,CarFront,Unplug} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Calendar} from '@/components/ui/calendar';
 import {ko} from 'date-fns/locale';
@@ -65,7 +65,7 @@ return <><section className="date-journey" aria-labelledby="date-heading">
 
 
   </section><section className="connected-transit" aria-label="교통 서비스 로그인"><div className="transit-heading"><div><span className="eyebrow">CONNECT ONCE</span><h2>사용한 서비스에 로그인하세요.</h2><p>로그인 성공을 자동 감지합니다. 다음 방문에는 연결 상태를 재사용해요.</p></div>{busy&&<span className="auto-indicator"><LoaderCircle size={16} className="animate-spin"/> 날짜 반영 중</span>}</div>
- <div className="transit-connections">{SOURCES.filter(source=>primaryServices.includes(source.id)).map(provider=>{const item=status?.connections.find(connection=>connection.providerId===provider.id),state=item?.state||'disconnected',Icon=provider.id==='korail'?TrainFront:BusFront;
+ <div className="transit-connections">{SOURCES.filter(source=>primaryServices.includes(source.id)).map(provider=>{const item=status?.connections.find(connection=>connection.providerId===provider.id),state=item?.state||'disconnected',Icon=provider.id==='korail'?TrainFront:provider.id==='hipass'?CarFront:BusFront;
  return <article className={'transit-card provider-'+provider.id} key={provider.id}><div className="transit-card-title"><span className="transit-symbol"><Icon size={25}/></span><div><h3>{provider.name}</h3><span className={'connection-state state-'+state}>{labels[state]||state}</span></div></div><p>{item?.note||(provider.id==='tmoneyTransit'?'등록된 티머니 카드의 지하철·시내버스 이용내역':'로그인 후 선택한 날짜를 자동으로 조회합니다.')}</p>
  {!item?.connected?<Button disabled={busy||!requestedDates.length||(signedIn&&!status?.configured)} onClick={()=>void login(provider.id)}><LogIn size={16}/> 로그인</Button>:<div className="connected-label"><Check size={17}/> 로그인 연결됨{item.count?' · '+item.count+'건':''}</div>}
  {item?.loginUrl&&<a className="login-fallback" href={item.loginUrl} target="_blank" rel="noopener noreferrer">로그인 창 다시 열기 <ArrowUpRight size={13}/></a>}

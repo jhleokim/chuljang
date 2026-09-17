@@ -113,4 +113,7 @@ export async function startHomeServer(){
   let closing=false;const close=async()=>{if(closing)return;closing=true;clearInterval(housekeeping);await web.close();await collector.close();await app.close();state.storage.close();};
   process.once('SIGTERM',()=>void close());process.once('SIGINT',()=>void close());return {close};
 }
-if(process.argv[1]&&resolve(process.argv[1])===resolve('selfhost/server.mjs'))await startHomeServer();
+if(process.argv[1]&&resolve(process.argv[1])===resolve('selfhost/server.mjs')){
+  if(process.env.COLLECTOR_ONLY==='1')await (await import('./collector-service.mjs')).startCollectorService();
+  else await startHomeServer();
+}

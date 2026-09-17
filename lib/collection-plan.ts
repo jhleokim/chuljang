@@ -1,5 +1,5 @@
 export type AutoConnection={providerId:string;state:string;requestedDates:string[];consentedAt?:string;connected?:boolean};
-export const primaryServices=['korail','tmoneyTransit','kobus'];
+export const primaryServices=['korail','tmoneyTransit','kobus','hipass'];
 const active=['queued','opening','login','collecting'];
 export function collectionPlan(connections:AutoConnection[],dates:string[]){
  const key=[...new Set(dates)].sort().join(',');

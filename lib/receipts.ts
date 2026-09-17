@@ -1,7 +1,7 @@
 import { z } from 'zod';
-export const sourceIds = ['ktx','transit','kakaot','tmoney','airline','socar'] as const;
+export const sourceIds = ['ktx','transit','kakaot','tmoney','hipass','airline','socar'] as const;
 export type Source = typeof sourceIds[number];
-export const sourceNames: Record<Source,string> = {ktx:'KTX · 코레일',transit:'티머니 · 지하철·시내버스',kakaot:'카카오 T',tmoney:'고속버스 · KOBUS',airline:'항공',socar:'쏘카'};
+export const sourceNames: Record<Source,string> = {ktx:'KTX · 코레일',transit:'티머니 · 지하철·시내버스',kakaot:'카카오 T',tmoney:'고속버스 · KOBUS',hipass:'하이패스 · 통행료',airline:'항공',socar:'쏘카'};
 export function isDate(value:string) { if(!/^20\d{2}-\d{2}-\d{2}$/.test(value))return false; const d=new Date(value+'T00:00:00Z'); return !Number.isNaN(d.valueOf())&&d.toISOString().slice(0,10)===value; }
 export const candidateSchema=z.object({
   source:z.enum(sourceIds), date:z.string().refine(isDate,'날짜를 확인해 주세요.'),

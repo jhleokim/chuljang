@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS home_users(id TEXT PRIMARY KEY,username TEXT NOT NULL,role TEXT NOT NULL,disabled INTEGER NOT NULL DEFAULT 0,created INTEGER NOT NULL);
+CREATE TRIGGER IF NOT EXISTS active_owner_receipts_insert BEFORE INSERT ON receipts WHEN NOT EXISTS(SELECT 1 FROM home_users WHERE id=NEW.user_id AND disabled=0) BEGIN SELECT RAISE(ABORT,'Inactive owner'); END;
+CREATE TRIGGER IF NOT EXISTS active_owner_receipts_update BEFORE UPDATE ON receipts WHEN NOT EXISTS(SELECT 1 FROM home_users WHERE id=NEW.user_id AND disabled=0) BEGIN SELECT RAISE(ABORT,'Inactive owner'); END;
+CREATE TRIGGER IF NOT EXISTS active_owner_trips_insert BEFORE INSERT ON trips WHEN NOT EXISTS(SELECT 1 FROM home_users WHERE id=NEW.user_id AND disabled=0) BEGIN SELECT RAISE(ABORT,'Inactive owner'); END;
+CREATE TRIGGER IF NOT EXISTS active_owner_trips_update BEFORE UPDATE ON trips WHEN NOT EXISTS(SELECT 1 FROM home_users WHERE id=NEW.user_id AND disabled=0) BEGIN SELECT RAISE(ABORT,'Inactive owner'); END;
+CREATE TRIGGER IF NOT EXISTS active_owner_settings_insert BEFORE INSERT ON report_settings WHEN NOT EXISTS(SELECT 1 FROM home_users WHERE id=NEW.user_id AND disabled=0) BEGIN SELECT RAISE(ABORT,'Inactive owner'); END;
+CREATE TRIGGER IF NOT EXISTS active_owner_settings_update BEFORE UPDATE ON report_settings WHEN NOT EXISTS(SELECT 1 FROM home_users WHERE id=NEW.user_id AND disabled=0) BEGIN SELECT RAISE(ABORT,'Inactive owner'); END;
+CREATE TRIGGER IF NOT EXISTS active_owner_shares_insert BEFORE INSERT ON report_shares WHEN NOT EXISTS(SELECT 1 FROM home_users WHERE id=NEW.user_id AND disabled=0) BEGIN SELECT RAISE(ABORT,'Inactive owner'); END;
+CREATE TRIGGER IF NOT EXISTS active_owner_shares_update BEFORE UPDATE ON report_shares WHEN NOT EXISTS(SELECT 1 FROM home_users WHERE id=NEW.user_id AND disabled=0) BEGIN SELECT RAISE(ABORT,'Inactive owner'); END;
