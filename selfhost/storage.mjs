@@ -1,12 +1,14 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync, renameSync } from 'node:fs';
 import { readFile, writeFile, rename, unlink } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import {storageKey,encrypted,encryptFile,decryptFile} from './encryption.mjs';
 
 export class HomeStorage {
-  constructor(directory) {
+  constructor(directory, secret) {
     this.directory = resolve(directory);
+    this.fileKey = secret ? storageKey(secret) : null;
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     mkdirSync(join(this.directory, 'files'), { recursive: true, mode: 0o700 });
     this.sql = new DatabaseSync(join(this.directory, 'chuljang.sqlite'));
@@ -23,6 +25,12 @@ export class HomeStorage {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS home_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS home_sessions (token TEXT PRIMARY KEY, expires INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS home_login_attempts (time INTEGER NOT NULL);`);
+    if(this.fileKey)for(const name of readdirSync(join(this.directory,'files'))){
+      if(!/^[a-f0-9-]{36}$/.test(name))continue;
+      const path=join(this.directory,'files',name),bytes=readFileSync(path);
+      if(encrypted(bytes)){decryptFile(this.fileKey,'receipts/'+name,bytes);continue;}
+      const temp=path+'.'+randomUUID()+'.tmp';writeFileSync(temp,encryptFile(this.fileKey,'receipts/'+name,bytes),{mode:0o600,flag:'wx'});renameSync(temp,path);
+    }
   }
   get(key) { const row = this.sql.prepare('SELECT value FROM home_state WHERE key=?').get(key); return row ? JSON.parse(row.value) : undefined; }
   set(key, value) { this.sql.prepare('INSERT INTO home_state VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(value)); }
@@ -44,10 +52,10 @@ export class HomeStorage {
         const target = this.filePath(key), temp = target + '.' + randomUUID() + '.tmp';
         const bytes = await new Response(stream).arrayBuffer();
         if (bytes.byteLength > 12 * 1024 * 1024) throw new Error('File too large');
-        try { await writeFile(temp, new Uint8Array(bytes), { mode: 0o600, flag: 'wx' }); await rename(temp, target); }
+        try { await writeFile(temp, this.fileKey?encryptFile(this.fileKey,key,new Uint8Array(bytes)):new Uint8Array(bytes), { mode: 0o600, flag: 'wx' }); await rename(temp, target); }
         finally { await unlink(temp).catch(error => { if (error.code !== 'ENOENT') throw error; }); }
       },
-      get: async key => { try { return { body: new Uint8Array(await readFile(this.filePath(key))) }; } catch (error) { if (error.code === 'ENOENT') return null; throw error; } },
+      get: async key => { try { const bytes=await readFile(this.filePath(key));return { body: new Uint8Array(this.fileKey?decryptFile(this.fileKey,key,bytes):bytes) }; } catch (error) { if (error.code === 'ENOENT') return null; throw error; } },
       delete: async key => { await unlink(this.filePath(key)).catch(error => { if (error.code !== 'ENOENT') throw error; }); },
     };
   }

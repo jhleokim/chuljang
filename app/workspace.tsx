@@ -36,11 +36,11 @@ function packetValue(value:unknown):Packet{
  if(p.attachment!==undefined)attachmentFile(p.attachment);
  return {source:p.source as Source,blocks:p.blocks as string[],sourceUrl:typeof p.sourceUrl==='string'?p.sourceUrl:'',automatic:p.version===3&&p.automatic===true,requestedDates:p.version===3?normalizeDates(p.requestedDates):undefined,attachment:p.attachment as ReceiptAttachment|undefined};
 }
-export default function Workspace({signedIn}:{signedIn:boolean}) {
+export default function Workspace({signedIn,homeMode=false,accountName='',accountId=''}:{signedIn:boolean;homeMode?:boolean;accountName?:string;accountId?:string}) {
  const [requestedDates,setRequestedDates]=useState<string[]>([]);
  const [collecting,setCollecting]=useState(false);
- useEffect(()=>{try{const saved=sessionStorage.getItem('chuljang-dates');if(saved)setRequestedDates(normalizeDates(JSON.parse(saved)));}catch{}},[]);
- function chooseDates(days:string[]){setRequestedDates(days);try{sessionStorage.setItem('chuljang-dates',JSON.stringify(days));}catch{}}
+ useEffect(()=>{try{const saved=sessionStorage.getItem('chuljang-dates:'+accountId);if(saved)setRequestedDates(normalizeDates(JSON.parse(saved)));}catch{}},[accountId]);
+ function chooseDates(days:string[]){setRequestedDates(days);try{sessionStorage.setItem('chuljang-dates:'+accountId,JSON.stringify(days));}catch{}}
  const [receipts,setReceipts]=useState<Receipt[]>([]),[trips,setTrips]=useState<Trip[]>([]);
  const [loading,setLoading]=useState(signedIn),[loadError,setLoadError]=useState('');
  const [modal,setModal]=useState<'collect'|'trip'|'edit'|'signin'|null>(null),[source,setSource]=useState<Source>('ktx');
@@ -184,7 +184,7 @@ export default function Workspace({signedIn}:{signedIn:boolean}) {
  const provider=providers.find(p=>p.id===source)!;
  return <div className="app-shell">
   <Toaster theme="light" richColors position="top-center"/>
-  <header className="topbar"><a className="brand" href="/"><span className="brand-icon"><BriefcaseBusiness size={21}/></span>출장<span className="brand-en">CHULJANG</span></a><div className="topbar-right"><span className="private-label">나의 정산 공간</span>{signedIn?<span className="avatar">나</span>:<a className="signin-link" href="/signin-with-chatgpt?return_to=/" target="_top">로그인</a>}</div></header>
+  <header className="topbar"><a className="brand" href="/"><span className="brand-icon"><BriefcaseBusiness size={21}/></span>출장<span className="brand-en">CHULJANG</span></a><div className="topbar-right"><span className="private-label">나의 정산 공간</span>{signedIn?(homeMode?<a className="signin-link" href="/account" title={accountName+' 계정과 보안'}>계정과 보안</a>:<span className="avatar">나</span>):<a className="signin-link" href="/signin-with-chatgpt?return_to=/" target="_top">로그인</a>}</div></header>
   <main className="workspace"><div className="page-heading"><div><p className="eyebrow">TRAVEL EXPENSES</p><h1>출장 영수증</h1><p className="subheading">날짜만 고르면, 출장 정산이 시작됩니다.</p></div><Button className="primary-button" onClick={()=>openCollect()}><Plus size={18}/> 영수증 가져오기</Button></div>
   {!signedIn&&<div className="notice">가져온 영수증을 내 공간에 보관할 수 있도록 먼저 <a href="/signin-with-chatgpt?return_to=/" target="_top">로그인해 주세요.</a></div>}
   {loadError&&<div className="notice error" role="alert"><span>{loadError}</span><Button variant="outline" size="sm" onClick={()=>void refresh()}>다시 불러오기</Button></div>}

@@ -8,6 +8,7 @@ import { hashPassword } from '../selfhost/auth.mjs';
 import {zipSync,strToU8} from 'fflate';
 import {defaultReport} from '../lib/report.ts';
 import {buildReportWorkbook} from '../lib/report-workbook.ts';
+import {consentVersion} from '../selfhost/consent.mjs';
 const directory=await mkdtemp(join(tmpdir(),'chuljang-production-smoke-'));
 const origin='http://127.0.0.1:3091',password=randomBytes(24).toString('hex');
 const child=spawn(process.execPath,['selfhost/server.mjs'],{cwd:process.cwd(),env:{...process.env,HOME_ORIGIN:origin,HOME_PASSWORD_HASH:await hashPassword(password),HOME_COLLECTOR_KEY:randomBytes(48).toString('hex'),CHULJANG_DATA_DIR:directory,PORT:'3091'},stdio:['ignore','pipe','pipe']});
@@ -30,10 +31,29 @@ try{
  const saved=await fetch(origin+'/api/report-settings',{method:'POST',headers:{Cookie:cookie,Origin:origin},body:form});assert.equal(saved.status,200,await saved.text());
  assert.equal((await fetch(origin+'/api/report-settings/template')).status,401);assert.equal((await fetch(origin+'/api/report-settings/template',{headers})).status,200);
  const configAgain=await (await fetch(origin+'/api/report-settings',{headers})).json();assert.equal(configAgain.templateName,'synthetic.xlsx');assert.equal(configAgain.config.recipient,'synthetic@example.com');
+ const invited=await fetch(origin+'/account',{method:'POST',headers:{Cookie:cookie,Origin:origin},body:new URLSearchParams({action:'invite',current:password})});assert.equal(invited.status,200);const invite=(await invited.text()).match(/\/join#([a-f0-9]{64})/)[1];
+ const joined=await fetch(origin+'/join',{method:'POST',headers:{Origin:origin},body:new URLSearchParams({invite,username:'smoke-member',password,accepted:'yes',consent_version:consentVersion})});assert.equal(joined.status,201);const memberCookie=joined.headers.get('set-cookie'),memberHeaders={...headers,Cookie:memberCookie};
+ assert.deepEqual(await(await fetch(origin+'/api/receipts',{headers:memberHeaders})).json(),[]);assert.deepEqual(await(await fetch(origin+'/api/trips',{headers:memberHeaders})).json(),[]);
+ assert.equal((await fetch(origin+'/api/report-settings/template',{headers:memberHeaders})).status,404);
+ assert.equal((await fetch(origin+'/api/receipts/'+receipts[0].id,{headers:memberHeaders})).status,404);
+ const patch={date:'2026-09-09',merchant:'forbidden',amount:1,reference:'',tripId:null,reviewed:true};
+ assert.equal((await fetch(origin+'/api/receipts/'+receipts[0].id,{method:'PATCH',headers:memberHeaders,body:JSON.stringify(patch)})).status,404);
+ const upload=new FormData();upload.set('receipts',JSON.stringify([{...rows[0],attachmentIndex:0}]));upload.append('files',new Blob(['%PDF synthetic private file'],{type:'application/pdf'}),'private.pdf');
+ assert.equal((await fetch(origin+'/api/receipts',{method:'POST',headers:{Cookie:memberCookie,Origin:origin},body:upload})).status,200);
+ const memberRows=await(await fetch(origin+'/api/receipts',{headers:memberHeaders})).json();assert.equal(memberRows.length,1);
+ assert.equal((await fetch(origin+'/api/receipts/'+memberRows[0].id+'/attachment',{headers})).status,404);
+ assert.equal((await fetch(origin+'/api/receipts/'+memberRows[0].id+'/attachment',{headers:memberHeaders})).status,200);
+ assert.equal((await fetch(origin+'/api/receipts/'+memberRows[0].id,{method:'PATCH',headers:memberHeaders,body:JSON.stringify({...patch,tripId:trips[0].id})})).status,400);
  const file=zipSync({'test.txt':strToU8('synthetic sharing test only')}),shareForm=new FormData();shareForm.set('file',new Blob([file]),'synthetic.zip');
  const shareResponse=await fetch(origin+'/api/report-shares',{method:'POST',headers:{Cookie:cookie,Origin:origin},body:shareForm});assert.equal(shareResponse.status,200);const share=await shareResponse.json();
  const publicFile=await fetch(origin+share.path);assert.equal(publicFile.status,200);assert.match(publicFile.headers.get('content-disposition'),/attachment/);assert.deepEqual(new Uint8Array(await publicFile.arrayBuffer()),file);
+ assert.deepEqual(await(await fetch(origin+'/api/report-shares',{headers:memberHeaders})).json(),[]);
+ await fetch(origin+'/api/report-shares',{method:'DELETE',headers:memberHeaders,body:JSON.stringify({id:share.id})});assert.equal((await fetch(origin+share.path)).status,200);
  const revoked=await fetch(origin+'/api/report-shares',{method:'DELETE',headers,body:JSON.stringify({id:share.id})});assert.equal(revoked.status,200);assert.equal((await fetch(origin+share.path)).status,404);assert.equal((await fetch(origin+'/share/'+'0'.repeat(64))).status,404);
- console.log('Home production smoke PASS: authentication, SQLite, collector, template persistence, anonymous token download, revocation, missing-token isolation.');
+ const memberShare=await(await fetch(origin+'/api/report-shares',{method:'POST',headers:{Cookie:memberCookie,Origin:origin},body:shareForm})).json();assert.equal((await fetch(origin+memberShare.path)).status,200);
+ const removed=await fetch(origin+'/account',{method:'POST',headers:{Cookie:memberCookie,Origin:origin},body:new URLSearchParams({action:'delete',current:password,confirm:'smoke-member'})});assert.equal(removed.status,200);
+ assert.equal((await fetch(origin+'/api/receipts',{headers:memberHeaders})).status,401);assert.equal((await fetch(origin+memberShare.path)).status,404);
+ assert.equal((await(await fetch(origin+'/api/receipts',{headers})).json()).length,1);
+ console.log('Home production smoke PASS: consent registration, two-account receipt/template/attachment/trip/share isolation, private file decryption, self deletion, original owner preservation.');
 }catch(error){console.error(logs);throw error;}
 finally{child.kill('SIGTERM');await new Promise(resolve=>{if(child.exitCode!==null)return resolve();child.once('exit',resolve);setTimeout(()=>{child.kill('SIGKILL');resolve();},5000).unref();});if(!resolve(directory).startsWith(resolve(tmpdir())+'\\chuljang-production-smoke-')&&!resolve(directory).startsWith(resolve(tmpdir())+'/chuljang-production-smoke-'))throw new Error('Unexpected test directory');await rm(directory,{recursive:true,force:true});}

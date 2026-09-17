@@ -4,7 +4,7 @@ type Runtime = {storage:HomeStorage;collector?:{request:(owner:string,values:Rec
 const key=Symbol.for('chuljang.home.runtime');
 const shared=globalThis as typeof globalThis & {[key]:Runtime|undefined};
 export function runtime():Runtime{
-  if(!shared[key])shared[key]={storage:new HomeStorage(process.env.CHULJANG_DATA_DIR||'./selfhost-data')};
+  if(!shared[key]){if(!process.env.HOME_COLLECTOR_KEY)throw new Error('Missing storage encryption key');shared[key]={storage:new HomeStorage(process.env.CHULJANG_DATA_DIR||'./selfhost-data',process.env.HOME_COLLECTOR_KEY)};}
   return shared[key]!;
 }
 // Only the home build resolves cloudflare:workers to this module. No cloud SDK
